@@ -1,0 +1,82 @@
+-- Prisma Schema Extensions for Master Data
+
+-- Note: Add these models to your existing schema.prisma file
+
+model PoliceStation {
+  id               String   @id @default(uuid())
+  code             String   @unique
+  name             String
+  district         String
+  range            String
+  address          String
+  contactNumber    String
+  inchargeOfficer  String?
+  isActive         Boolean  @default(true)
+  
+  // Relationships
+  beats            Beat[]
+  seniorCitizens   SeniorCitizen[]
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@index([district])
+  @@index([range])
+  @@index([isActive])
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  description String
+  permissions String[] // Array of permission strings
+  isActive    Boolean  @default(true)
+  
+  // Relationships
+  users       User[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([isActive])
+}
+
+model VisitType {
+  id               String   @id @default(uuid())
+  code             String   @unique
+  name             String
+  description      String
+  defaultDuration  Int      @default(30) // in minutes
+  requiresApproval Boolean  @default(false)
+  priority         Int      @default(3) // 1=Critical, 2=High, 3=Medium, 4=Low
+  isActive         Boolean  @default(true)
+  
+  // Relationships
+  visits           Visit[]
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@index([priority])
+  @@index([isActive])
+}
+
+// Add roleId field to existing User model
+// Update User model to include:
+// roleId       String?
+// role         Role?   @relation(fields: [roleId], references: [id])
+
+// Add policeStationId field to existing Beat model if not present
+// Update Beat model to include:
+// policeStationId  String?
+// policeStation    PoliceStation? @relation(fields: [policeStationId], references: [id])
+
+// Add visitTypeId field to existing Visit model
+// Update Visit model to include:
+// visitTypeId  String?
+// visitType    VisitType? @relation(fields: [visitTypeId], references: [id])
+
+// After adding these models, run:
+// npx prisma migrate dev --name add_master_data_models
+// npx prisma generate

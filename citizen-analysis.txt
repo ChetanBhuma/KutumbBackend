@@ -1,0 +1,10 @@
+Checking Citizen One (cmknu12cd00038eiro845md6y)...
+{
+  "message": "Citizen Details",
+  "id": "cmknu12cd00038eiro845md6y",
+  "name": "Citizen One",
+  "beatId": null,
+  "beatName": "Unassigned",
+  "policeStationId": "cmkgp04qq008dby7om11f3uvv",
+  "psName": "PS UTTAM NAGAR"
+}

@@ -1,0 +1,247 @@
+import { Request, Response, NextFunction } from 'express';
+import { AuthRequest } from '../middleware/authenticate';
+import { prisma } from '../config/database';
+import { AppError } from '../middleware/errorHandler';
+import { auditLogger } from '../config/logger';
+
+export class LeaveController {
+    /**
+     * Request leave
+     */
+    static async requestLeave(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            const { officerId, startDate, endDate, leaveType, reason } = req.body;
+
+            // Validate dates
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+
+            if (end < start) {
+                throw new AppError('End date must be after start date', 400);
+            }
+
+            // Check for overlapping leave
+            const overlapping = await prisma.officerLeave.findMany({
+                where: {
+                    officerId,
+                    status: { in: ['Pending', 'Approved'] },
+                    OR: [
+                        {
+                            AND: [
+                                { startDate: { lte: start } },
+                                { endDate: { gte: start } }
+                            ]
+                        },
+                        {
+                            AND: [
+                                { startDate: { lte: end } },
+                                { endDate: { gte: end } }
+                            ]
+                        }
+                    ]
+                }
+            });
+
+            if (overlapping.length > 0) {
+                throw new AppError('Leave request overlaps with existing leave', 409);
+            }
+
+            // Create leave request
+            const leave = await prisma.officerLeave.create({
+                data: {
+                    officerId,
+                    startDate: start,
+                    endDate: end,
+                    leaveType,
+                    reason
+                },
+                include: {
+                    officer: {
+                        select: {
+                            id: true,
+                            name: true,
+                            badgeNumber: true
+                        }
+                    }
+                }
+            });
+
+            auditLogger.info('Leave request created', {
+                leaveId: leave.id,
+                officerId,
+                startDate,
+                endDate,
+                requestedBy: req.user?.email
+            });
+
+            return res.status(201).json({
+                success: true,
+                data: { leave },
+                message: 'Leave request submitted successfully'
+            });
+        } catch (error) {
+            return next(error);
+        }
+    }
+
+    /**
+     * Approve/Reject leave
+     */
+    static async updateStatus(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            const { id } = req.params;
+            const { status, rejectionReason } = req.body;
+
+            if (!['Approved', 'Rejected'].includes(status)) {
+                throw new AppError('Invalid status. Must be Approved or Rejected', 400);
+            }
+
+            const leave = await prisma.officerLeave.update({
+                where: { id },
+                data: {
+                    status,
+                    approvedBy: req.user?.id,
+                    approvedAt: new Date(),
+                    rejectionReason: status === 'Rejected' ? rejectionReason : undefined
+                },
+                include: {
+                    officer: true
+                }
+            });
+
+            auditLogger.info('Leave request updated', {
+                leaveId: id,
+                status,
+                approvedBy: req.user?.email
+            });
+
+            return res.json({
+                success: true,
+                data: { leave },
+                message: `Leave request ${status.toLowerCase()} successfully`
+            });
+        } catch (error) {
+            return next(error);
+        }
+    }
+
+    /**
+     * Get officer leave calendar
+     */
+    static async getOfficerLeaves(req: Request, res: Response, next: NextFunction) {
+        try {
+            const { officerId } = req.params;
+            const { startDate, endDate, status } = req.query;
+
+            const where: any = { officerId };
+
+            if (status) {
+                where.status = String(status);
+            }
+
+            if (startDate || endDate) {
+                where.OR = [];
+                if (startDate) {
+                    where.OR.push({ startDate: { gte: new Date(String(startDate)) } });
+                }
+                if (endDate) {
+                    where.OR.push({ endDate: { lte: new Date(String(endDate)) } });
+                }
+            }
+
+            const leaves = await prisma.officerLeave.findMany({
+                where,
+                orderBy: { startDate: 'desc' }
+            });
+
+            return res.json({
+                success: true,
+                data: {
+                    leaves,
+                    count: leaves.length
+                }
+            });
+        } catch (error) {
+            return next(error);
+        }
+    }
+
+    /**
+     * Check officer availability
+     */
+    static async checkAvailability(req: Request, res: Response, next: NextFunction) {
+        try {
+            const { officerId, date } = req.query;
+
+            if (!officerId || !date) {
+                throw new AppError('Officer ID and date are required', 400);
+            }
+
+            const checkDate = new Date(String(date));
+
+            const leave = await prisma.officerLeave.findFirst({
+                where: {
+                    officerId: String(officerId),
+                    status: 'Approved',
+                    startDate: { lte: checkDate },
+                    endDate: { gte: checkDate }
+                }
+            });
+
+            return res.json({
+                success: true,
+                data: {
+                    available: !leave,
+                    onLeave: !!leave,
+                    leaveDetails: leave || null
+                }
+            });
+        } catch (error) {
+            return next(error);
+        }
+    }
+
+    /**
+     * List all leave requests
+     */
+    static async list(req: Request, res: Response, next: NextFunction) {
+        try {
+            const { status, leaveType } = req.query;
+
+            const where: any = {};
+
+            if (status) {
+                where.status = String(status);
+            }
+
+            if (leaveType) {
+                where.leaveType = String(leaveType);
+            }
+
+            const leaves = await prisma.officerLeave.findMany({
+                where,
+                include: {
+                    officer: {
+                        select: {
+                            id: true,
+                            name: true,
+                            badgeNumber: true,
+                            policeStationId: true
+                        }
+                    }
+                },
+                orderBy: { requestedAt: 'desc' }
+            });
+
+            return res.json({
+                success: true,
+                data: {
+                    leaves,
+                    count: leaves.length
+                }
+            });
+        } catch (error) {
+            return next(error);
+        }
+    }
+}

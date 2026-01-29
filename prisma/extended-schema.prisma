@@ -1,0 +1,78 @@
+-- Extended Prisma Schema for Additional Master Data Models
+-- Add these models to your existing schema.prisma file
+
+model HealthCondition {
+  id                  String   @id @default(uuid())
+  code                String   @unique
+  name                String
+  description         String
+  severity            String   @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  requiresSpecialCare Boolean  @default(false)
+  isActive            Boolean  @default(true)
+  
+  // Relationships
+  citizens            SeniorCitizen[]
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  @@index([severity])
+  @@index([isActive])
+}
+
+model Designation {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  department  String   // POLICE, ADMIN, TECHNICAL, SUPPORT
+  level       Int      @default(1) // 1=Highest, 10=Lowest
+  description String
+  isActive    Boolean  @default(true)
+  
+  // Relationships
+  officers    User[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([department])
+  @@index([level])
+  @@index([isActive])
+}
+
+model District {
+  id               String   @id @default(uuid())
+  code             String   @unique
+  name             String
+  range            String
+  area             String   // Area in square kilometers
+  population       Int      @default(0)
+  headquarters     String
+  isActive         Boolean  @default(true)
+  
+  // Relationships
+  policeStations   PoliceStation[]
+  citizens         SeniorCitizen[]
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@index([range])
+  @@index([isActive])
+}
+
+// Updates to existing models:
+// 
+// Update SeniorCitizen model to include:
+// districtId         String?
+// district           District?        @relation(fields: [districtId], references: [id])
+// healthConditionIds String[]         // Array of health condition IDs
+// healthConditions   HealthCondition[] @relation(references: [id])
+//
+// Update User model to include:
+// designationId      String?
+// designation        Designation?     @relation(fields: [designationId], references: [id])
+//
+// Update PoliceStation model to include:
+// districtId         String?
+// district           District?        @relation(fields: [districtId], references: [id])

@@ -1,0 +1,19 @@
+Analyzing Constable Sahil (Badge: 99991111)...
+{
+  "message": "Officer Details",
+  "id": "cmkmgvzb50004wl6mg4d3v0j0",
+  "name": "Sahil",
+  "beatId": "cmkw6h6ra00ch80g9eetzii16",
+  "beatName": "PS UTTAM NAGAR Beat 2",
+  "beatCitizensCount": 0
+}
+Visits Assigned: 1
+{
+  "message": "Visit 1",
+  "id": "cmknw96cv000e11ydecan0ugm",
+  "status": "SCHEDULED",
+  "citizenId": "cmknu12cd00038eiro845md6y",
+  "citizenName": "Citizen One"
+}
+Checking citizens in Beat cmkw6h6ra00ch80g9eetzii16...
+Actual Prisma count of citizens in beat cmkw6h6ra00ch80g9eetzii16: 0

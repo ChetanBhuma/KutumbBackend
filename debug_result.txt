@@ -1,0 +1,22 @@
+STARTING TEST
+Officer Station: cmkgp04qq008dby7om11f3uvv
+
+Running dataScopeMiddleware...
+Middleware called next()
+
+Middleware Result Scope: {
+  "level": "POLICE_STATION",
+  "jurisdictionIds": {
+    "policeStationId": "cmkgp04qq008dby7om11f3uvv"
+  }
+}
+
+Running BeatController.list...
+
+--- Controller Response ---
+Returned 1 beats.
+{
+  "firstBeat": "PS UTTAM NAGAR Beat 2",
+  "stationId": "cmkgp04qq008dby7om11f3uvv"
+}
+SUCCESS: Beat station matches user station.

@@ -1,0 +1,6 @@
+Role: ACP                            Level: SUB_DIVISION
+Role: CONSTABLE                      Level: POLICE_STATION
+Role: DCP                            Level: DISTRICT
+Role: SHO                            Level: POLICE_STATION
+Role: TEST                           Level: RANGE
+Role: ZONE MANAGER                   Level: DISTRICT

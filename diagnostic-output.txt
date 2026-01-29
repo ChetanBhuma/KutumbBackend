@@ -1,0 +1,32 @@
+﻿≡ƒöì Running Verification System Diagnostics...
+
+≡ƒôè Analyzing Citizens...
+  Γ£ô Total Citizens: 4
+  Γ£ô Citizens without Police Station: 0
+  Γ£ô Citizens in PENDING_REVIEW: 3
+  Γ£ô PENDING_REVIEW without Police Station: 0
+
+≡ƒæ« Analyzing Officers...
+  Γ£ô Total Officers: 909
+  Γ£ô Active Officers: 909
+
+≡ƒÅó Analyzing Police Stations...
+  Γ£ô Total Police Stations: 180
+  Γ£ô Stations with Active Officers: 181
+  Γ£ô Stations without Active Officers: 0
+
+≡ƒôï Analyzing Verification Requests...
+  Γ£ô Total Verification Requests: 1
+  Γ£ô PENDING Verification Requests: 0
+  Γ£ô Requests without Visits: 0
+
+≡ƒöì Cross-checking Citizens with Verification Requests...
+  Γ£ô Citizens with Verification Requests but no Police Station: 0
+
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+≡ƒôè DIAGNOSTIC SUMMARY
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+Γ£à All checks passed! The verification system is healthy.
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+
+Γ£à Diagnostics completed successfully
