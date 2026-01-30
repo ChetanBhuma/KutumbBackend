@@ -9,8 +9,17 @@ import { NotificationType } from '../services/notificationService';
 
 const router = Router();
 
-// All routes require authentication and admin/super_admin role
+// All routes require authentication
 router.use(authenticate);
+
+// --- User Routes ---
+router.get('/', NotificationController.getNotifications);
+router.patch('/read-all', NotificationController.markAllRead);
+router.patch('/:id/read', NotificationController.markRead);
+router.delete('/:id', NotificationController.deleteNotification);
+
+// --- Admin Routes ---
+// Only admin/super_admin can send notifications via API
 router.use(requireRole([Role.ADMIN, Role.SUPER_ADMIN]));
 
 /**

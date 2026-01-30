@@ -565,6 +565,73 @@ export class VisitController {
                         registrationApproved: true
                     });
                 }
+
+
+                // --- AUTO-SCHEDULE FOLLOW-UP VISIT ---
+                // Rules: Critical=+15d, High=+21d, Medium=+41d, Low=+51d
+                let daysToAdd = 51; // Default Low
+                if (newVulnerabilityLevel === 'Critical') daysToAdd = 15;
+                else if (newVulnerabilityLevel === 'High') daysToAdd = 21;
+                else if (newVulnerabilityLevel === 'Medium') daysToAdd = 41;
+
+                const nextVisitDate = new Date();
+                nextVisitDate.setDate(nextVisitDate.getDate() + daysToAdd);
+
+                // Find officer with least workload in same Police Station
+                // Workload = Count of SCHEDULED visits
+                const policeStationId = visit.PoliceStation?.id || updatedVisit.policeStationId;
+
+                // Get all officers in this station
+                const officersInStation = await prisma.beatOfficer.findMany({
+                    where: {
+                        policeStationId,
+                        isActive: true
+                    },
+                    select: {
+                        id: true,
+                        beatId: true,
+                        _count: {
+                            select: {
+                                Visit: {
+                                    where: { status: 'SCHEDULED' }
+                                }
+                            }
+                        }
+                    }
+                });
+
+                let assignedOfficerId = visit.officerId; // Default to current officer
+                let assignedBeatId = visit.beatId;
+
+                if (officersInStation.length > 0) {
+                    // Sort by workload (asc)
+                    officersInStation.sort((a, b) => a._count.Visit - b._count.Visit);
+                    assignedOfficerId = officersInStation[0].id;
+                    assignedBeatId = officersInStation[0].beatId || assignedBeatId;
+                }
+
+                // Create the follow-up visit
+                const followUpVisit = await prisma.visit.create({
+                    data: {
+                        seniorCitizenId: visit.seniorCitizenId,
+                        officerId: assignedOfficerId,
+                        policeStationId: policeStationId,
+                        beatId: assignedBeatId,
+                        scheduledDate: nextVisitDate,
+                        status: 'SCHEDULED',
+                        visitType: 'Follow-up',
+                        notes: `Auto-scheduled follow-up based on vulnerability level: ${newVulnerabilityLevel}`
+                    }
+                });
+
+                auditLogger.info('Auto-scheduled follow-up visit', {
+                    originalVisitId: visit.id,
+                    newVisitId: followUpVisit.id,
+                    seniorCitizenId: visit.seniorCitizenId,
+                    vulnerabilityLevel: newVulnerabilityLevel,
+                    scheduledDate: nextVisitDate,
+                    assignedOfficerId: assignedOfficerId
+                });
             }
 
             auditLogger.info('Visit completed by officer', {

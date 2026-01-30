@@ -673,6 +673,7 @@ model User {
   Session        Session[]
   ApprovedLeaves OfficerLeave[] @relation("LeaveApprover")
   RejectedLeaves OfficerLeave[] @relation("LeaveRejecter")
+  Notification   Notification[]
 }
 
 model Visit {
@@ -1059,3 +1060,21 @@ model Permission {
   @@index([isActive])
 }
 
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("system") // system, alert, reminder, etc.
+  priority  String   @default("normal") // low, normal, high, urgent
+  isRead    Boolean  @default(false)
+  data      Json?    // Optional payload for navigation/actions
+  createdAt DateTime @default(now())
+
+  User      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}

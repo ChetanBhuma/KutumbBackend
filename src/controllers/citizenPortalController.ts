@@ -1200,7 +1200,8 @@ export class CitizenPortalController {
                             id: true,
                             name: true,
                             rank: true,
-                            badgeNumber: true
+                            badgeNumber: true,
+                            mobileNumber: true
                         }
                     },
                     PoliceStation: {

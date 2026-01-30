@@ -1,5 +1,8 @@
 import { logger } from '../config/logger';
 import { config } from '../config';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 export enum NotificationType {
     SMS = 'SMS',
@@ -145,10 +148,13 @@ export class NotificationService {
                 );
 
             case NotificationType.IN_APP:
-                // Store in database for in-app display
-                logger.info('In-app notification queued', {
-                    recipient: payload.recipient,
-                    message: payload.message
+                await this.createInAppNotification({
+                    userId: payload.recipient,
+                    title: payload.subject || 'Notification',
+                    message: payload.message,
+                    type: 'system', // Default if not mapped
+                    priority: payload.priority || NotificationPriority.NORMAL,
+                    data: payload.data
                 });
                 return true;
 
@@ -311,6 +317,69 @@ export class NotificationService {
     ): Promise<void> {
         const message = `New Task: You have a ${taskType} visit scheduled for ${citizenName} on ${date.toLocaleDateString()}. Check app for details.`;
         await this.sendSMS(officerPhone, message);
+    }
+
+    // --- In-App Notification Methods ---
+
+    static async createInAppNotification(data: {
+        userId: string;
+        title: string;
+        message: string;
+        type?: string;
+        priority?: string;
+        data?: any;
+    }) {
+        try {
+            return await prisma.notification.create({
+                data: {
+                    userId: data.userId,
+                    title: data.title,
+                    message: data.message,
+                    type: data.type || 'system',
+                    priority: data.priority || 'normal',
+                    data: data.data || {}
+                }
+            });
+        } catch (error) {
+            logger.error('Failed to create in-app notification', error);
+            return null;
+        }
+    }
+
+    static async getUserNotifications(userId: string, page = 1, limit = 20) {
+        const skip = (page - 1) * limit;
+        const [notifications, total, unread] = await Promise.all([
+            prisma.notification.findMany({
+                where: { userId },
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit
+            }),
+            prisma.notification.count({ where: { userId } }),
+            prisma.notification.count({ where: { userId, isRead: false } })
+        ]);
+
+        return { notifications, total, unread, pages: Math.ceil(total / limit) };
+    }
+
+    static async markAsRead(id: string, userId: string) {
+        return await prisma.notification.updateMany({
+            where: { id, userId },
+            data: { isRead: true }
+        });
+    }
+
+    static async markAllAsRead(userId: string) {
+        return await prisma.notification.updateMany({
+            where: { userId, isRead: false },
+            data: { isRead: true }
+        });
+    }
+
+    static async deleteNotification(id: string, userId: string) {
+        return await prisma.notification.deleteMany({
+            where: { id, userId }
+        });
     }
 }
 

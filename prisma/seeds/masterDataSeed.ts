@@ -31,6 +31,7 @@ async function seedRoles() {
                 'feedback.submit', 'notifications.manage'
             ],
             isActive: true,
+            jurisdictionLevel: 'ALL'
         },
         {
             code: 'ADMIN',
@@ -45,6 +46,7 @@ async function seedRoles() {
                 'system.settings'
             ],
             isActive: true,
+            jurisdictionLevel: 'ALL'
         },
         {
             code: 'OFFICER',
@@ -57,6 +59,7 @@ async function seedRoles() {
                 'reports.read'
             ],
             isActive: true,
+            jurisdictionLevel: 'BEAT'
         },
         {
             code: 'SUPERVISOR',
@@ -70,6 +73,7 @@ async function seedRoles() {
                 'reports.read', 'reports.generate'
             ],
             isActive: true,
+            jurisdictionLevel: 'POLICE_STATION'
         },
         {
             code: 'VIEWER',
@@ -82,6 +86,7 @@ async function seedRoles() {
                 'reports.read'
             ],
             isActive: true,
+            jurisdictionLevel: 'ALL'
         },
         {
             code: 'CONTROL_ROOM',
@@ -94,6 +99,7 @@ async function seedRoles() {
                 'visits.read'
             ],
             isActive: true,
+            jurisdictionLevel: 'ALL'
         },
         {
             code: 'DATA_ENTRY',
@@ -104,6 +110,7 @@ async function seedRoles() {
                 'documents.upload'
             ],
             isActive: true,
+            jurisdictionLevel: 'POLICE_STATION'
         },
         {
             code: 'CITIZEN',
@@ -117,6 +124,7 @@ async function seedRoles() {
                 'feedback.submit', 'notifications.manage'
             ],
             isActive: true,
+            jurisdictionLevel: 'NONE'
         },
     ];
 

@@ -126,4 +126,76 @@ export class NotificationController {
             next(error);
         }
     }
+
+    /**
+     * Get user notifications
+     */
+    static async getNotifications(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            const page = parseInt(req.query.page as string) || 1;
+            const limit = parseInt(req.query.limit as string) || 20;
+
+            // Check if user exists (should exist due to AuthRequest but good to be safe with !)
+            if (!req.user?.id) {
+                throw new AppError('User not authenticated', 401);
+            }
+
+            const result = await NotificationService.getUserNotifications(
+                req.user.id,
+                page,
+                limit
+            );
+
+            res.json({
+                success: true,
+                data: result
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * Mark notification as read
+     */
+    static async markRead(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            const { id } = req.params;
+            if (!req.user?.id) throw new AppError('User not authenticated', 401);
+
+            await NotificationService.markAsRead(id, req.user.id);
+            res.json({ success: true, message: 'Notification marked as read' });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * Mark all notifications as read
+     */
+    static async markAllRead(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            if (!req.user?.id) throw new AppError('User not authenticated', 401);
+
+            await NotificationService.markAllAsRead(req.user.id);
+            res.json({ success: true, message: 'All notifications marked as read' });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * Delete notification
+     */
+    static async deleteNotification(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            const { id } = req.params;
+            if (!req.user?.id) throw new AppError('User not authenticated', 401);
+
+            await NotificationService.deleteNotification(id, req.user.id);
+            res.json({ success: true, message: 'Notification deleted' });
+        } catch (error) {
+            next(error);
+        }
+    }
 }
