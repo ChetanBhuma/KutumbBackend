@@ -3,10 +3,21 @@ import path from 'path';
 import fs from 'fs';
 import { config } from './index';
 
-// Create logs directory if it doesn't exist
-const logsDir = path.resolve(config.logging.filePath);
-if (!fs.existsSync(logsDir)) {
-    fs.mkdirSync(logsDir, { recursive: true });
+// Check if running in serverless environment (Vercel has read-only filesystem)
+const isServerless = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
+
+// Create logs directory only if not in serverless environment
+let logsDir: string | null = null;
+if (!isServerless) {
+    logsDir = path.resolve(config.logging.filePath);
+    try {
+        if (!fs.existsSync(logsDir)) {
+            fs.mkdirSync(logsDir, { recursive: true });
+        }
+    } catch (error) {
+        console.warn('Could not create logs directory, using console logging only:', error);
+        logsDir = null;
+    }
 }
 
 // Define log format
@@ -26,33 +37,56 @@ const consoleFormat = winston.format.combine(
     })
 );
 
-// Create logger instance
-export const logger = winston.createLogger({
-    level: config.logging.level,
-    format: logFormat,
-    defaultMeta: { service: 'senior-citizen-portal' },
-    transports: [
-        // Write all logs to combined.log
+// Build transports array based on environment
+const loggerTransports: winston.transport[] = [];
+
+// Add file transports only if logsDir is available
+if (logsDir) {
+    loggerTransports.push(
         new winston.transports.File({
             filename: path.join(logsDir, 'combined.log'),
             maxsize: 10485760, // 10MB
             maxFiles: 5
         }),
-        // Write errors to error.log
         new winston.transports.File({
             filename: path.join(logsDir, 'error.log'),
             level: 'error',
             maxsize: 10485760,
             maxFiles: 5
         })
-    ]
+    );
+}
+
+// Always add console transport
+loggerTransports.push(new winston.transports.Console({
+    format: config.env === 'production' ? logFormat : consoleFormat
+}));
+
+// Create logger instance
+export const logger = winston.createLogger({
+    level: config.logging.level,
+    format: logFormat,
+    defaultMeta: { service: 'senior-citizen-portal' },
+    transports: loggerTransports
 });
 
-// Add console transport in development
-// Add console transport in ALL environments (Critical for Render/Docker)
-logger.add(new winston.transports.Console({
-    // Use JSON in production for better parsing, Colorized simple text in dev
-    format: config.env === 'production' ? logFormat : consoleFormat
+// Build audit transports
+const auditTransports: winston.transport[] = [];
+
+// Add file transport for audit only if logsDir is available
+if (logsDir) {
+    auditTransports.push(
+        new winston.transports.File({
+            filename: path.join(logsDir, 'audit.log'),
+            maxsize: 10485760,
+            maxFiles: 10
+        })
+    );
+}
+
+// Always add console for audit in serverless
+auditTransports.push(new winston.transports.Console({
+    format: logFormat
 }));
 
 // Create audit logger for security events
@@ -60,11 +94,5 @@ export const auditLogger = winston.createLogger({
     level: 'info',
     format: logFormat,
     defaultMeta: { service: 'audit' },
-    transports: [
-        new winston.transports.File({
-            filename: path.join(logsDir, 'audit.log'),
-            maxsize: 10485760,
-            maxFiles: 10 // Keep audit logs longer (CERT-In compliance)
-        })
-    ]
+    transports: auditTransports
 });
