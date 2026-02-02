@@ -8,7 +8,7 @@ export class BeatController {
     /**
      * Get all beats with full hierarchy
      */
-    static async list(req: Request, res: Response, next: NextFunction) {
+    static async list(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const { policeStationId, subDivisionId, districtId, rangeId, search, isActive } = req.query;
 
@@ -72,10 +72,11 @@ export class BeatController {
                 // SECURITY: If scope is restricted but we couldn't apply a filter (e.g., missing profile ID),
                 // we MUST return empty result instead of leaking all data.
                 if (!scoped) {
-                    return res.json({
+                    res.json({
                         success: true,
                         data: [],
                     });
+                    return;
                 }
             }
 
