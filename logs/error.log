@@ -1034,3 +1034,5 @@
 {"level":"error","message":"Error in PostgreSQL connection: Error { kind: Io, cause: Some(Os { code: 10054, kind: ConnectionReset, message: \"An existing connection was forcibly closed by the remote host.\" }) }","service":"senior-citizen-portal","target":"quaint::connector::postgres::native","timestamp":"2026-02-02T06:49:12.334Z"}
 {"level":"error","message":"Initial Redis connection failed. Entering mock mode.","service":"senior-citizen-portal","timestamp":"2026-02-02 17:39:20"}
 {"level":"error","message":"Redis connection failed. Switching to MOCK Redis.","service":"senior-citizen-portal","timestamp":"2026-02-02 17:39:20"}
+{"level":"error","message":"Initial Redis connection failed. Entering mock mode.","service":"senior-citizen-portal","timestamp":"2026-02-02 18:34:31"}
+{"level":"error","message":"Redis connection failed. Switching to MOCK Redis.","service":"senior-citizen-portal","timestamp":"2026-02-02 18:34:31"}
