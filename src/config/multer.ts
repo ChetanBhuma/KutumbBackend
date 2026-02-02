@@ -3,14 +3,23 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 
-// Ensure upload directories exist
-const uploadDir = path.join(process.cwd(), 'uploads');
+// Check if running in serverless environment
+const isServerless = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
+
+// Use /tmp for serverless (writable), ./uploads for traditional servers
+const uploadDir = isServerless ? '/tmp/uploads' : path.join(process.cwd(), 'uploads');
 const dirs = ['citizens', 'visits', 'documents', 'photos', 'digital-cards'];
 
+// Create upload directories only if we have write access
 dirs.forEach(dir => {
     const dirPath = path.join(uploadDir, dir);
-    if (!fs.existsSync(dirPath)) {
-        fs.mkdirSync(dirPath, { recursive: true });
+    try {
+        if (!fs.existsSync(dirPath)) {
+            fs.mkdirSync(dirPath, { recursive: true });
+        }
+    } catch (error) {
+        // In serverless, we'll create directories on-demand
+        console.warn(`Could not pre-create upload directory ${dirPath}:`, error);
     }
 });
 
@@ -21,12 +30,16 @@ const storage = multer.diskStorage({
         const folder = req.body.folder || 'documents';
         const destinationPath = path.join(uploadDir, folder);
 
-        // Create folder if it doesn't exist
-        if (!fs.existsSync(destinationPath)) {
-            fs.mkdirSync(destinationPath, { recursive: true });
+        // Create folder if it doesn't exist (on-demand creation for serverless)
+        try {
+            if (!fs.existsSync(destinationPath)) {
+                fs.mkdirSync(destinationPath, { recursive: true });
+            }
+            cb(null, destinationPath);
+        } catch (error) {
+            console.error('Failed to create upload directory:', error);
+            cb(new Error('Upload directory not accessible'), '');
         }
-
-        cb(null, destinationPath);
     },
     filename: (_req, file, cb) => {
         // Generate unique filename
