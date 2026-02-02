@@ -1044,3 +1044,5 @@
 {"level":"error","message":"Redis connection failed. Switching to MOCK Redis.","service":"senior-citizen-portal","timestamp":"2026-02-02 19:24:55"}
 {"level":"error","message":"Initial Redis connection failed. Entering mock mode.","service":"senior-citizen-portal","timestamp":"2026-02-02 21:50:50"}
 {"level":"error","message":"Redis connection failed. Switching to MOCK Redis.","service":"senior-citizen-portal","timestamp":"2026-02-02 21:50:50"}
+{"level":"error","message":"Initial Redis connection failed. Entering mock mode.","service":"senior-citizen-portal","timestamp":"2026-02-02 21:51:11"}
+{"level":"error","message":"Redis connection failed. Switching to MOCK Redis.","service":"senior-citizen-portal","timestamp":"2026-02-02 21:51:11"}
