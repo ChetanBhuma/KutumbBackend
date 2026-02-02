@@ -1,1 +1,0 @@
-{"version":3,"file":"citizenImportQueue.d.ts","sourceRoot":"","sources":["../../src/queues/citizenImportQueue.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,MAAM,MAAM,CAAC;AAKzB;;;GAGG;AAEH,UAAU,gBAAgB;IACtB,GAAG,EAAE,GAAG,CAAC;IACT,QAAQ,EAAE,MAAM,CAAC;IACjB,UAAU,EAAE,MAAM,CAAC;CACtB;AAGD,eAAO,MAAM,kBAAkB,+BAM7B,CAAC"}

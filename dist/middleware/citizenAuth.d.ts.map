@@ -1,1 +1,0 @@
-{"version":3,"file":"citizenAuth.d.ts","sourceRoot":"","sources":["../../src/middleware/citizenAuth.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,QAAQ,EAAE,YAAY,EAAE,MAAM,SAAS,CAAC;AAIjD,OAAO,EAAE,WAAW,EAAE,MAAM,gBAAgB,CAAC;AAG7C,eAAO,MAAM,mBAAmB,GAC5B,KAAK,WAAW,EAChB,MAAM,QAAQ,EACd,MAAM,YAAY,kBAgDrB,CAAC"}
