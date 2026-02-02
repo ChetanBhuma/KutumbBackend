@@ -21,6 +21,9 @@ import { setupSwagger } from './config/swagger';
 
 const app: Application = express();
 
+// Trust proxy - required for Vercel/proxy environments to read X-Forwarded-For
+app.set('trust proxy', 1);
+
 // Disable x-powered-by immediately
 app.disable('x-powered-by');
 
