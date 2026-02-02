@@ -4,6 +4,7 @@ import fs from 'fs';
 import { config } from './index';
 
 // Check if running in serverless environment (Vercel has read-only filesystem)
+// Force rebuild: 2026-02-02
 const isServerless = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
 
 // Create logs directory only if not in serverless environment
