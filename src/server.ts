@@ -77,3 +77,6 @@ try {
 }
 
 export default httpServer;
+
+// Export app for Vercel serverless functions
+export { app };
