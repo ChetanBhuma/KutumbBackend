@@ -58,8 +58,8 @@ const ensureOfficerAccess = async (req: AuthRequest, visitOfficerId: string) => 
 };
 
 const enforceGeofence = (citizen: any, latitude?: number, longitude?: number) => {
-    // Bypass geofence in development/test environment or when explicitly disabled
-    if (process.env.NODE_ENV !== 'production' || process.env.BYPASS_GEOFENCE === 'true') return;
+    // TEMP: Bypass geofence completely for production testing
+    return;
 
     if (latitude === undefined || longitude === undefined) {
         return;
