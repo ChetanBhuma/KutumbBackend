@@ -68,13 +68,19 @@ export class CitizenController {
                 where,
                 include: {
                     PoliceStation: {
-                        select: { id: true, name: true, code: true }
+                        select: { id: true, name: true }
                     },
                     Beat: {
-                        select: { id: true, name: true, code: true }
+                        select: { id: true, name: true }
                     },
-                    FamilyMember: true,
-                    EmergencyContact: true
+                    // OPTIMIZATION: Use counts instead of full relations for list view
+                    // Full data is fetched in getById for detail view
+                    _count: {
+                        select: {
+                            FamilyMember: true,
+                            EmergencyContact: true
+                        }
+                    }
                 },
                 orderBy: buildOrderBy(req.query, { createdAt: 'desc' })
             });

@@ -10,6 +10,29 @@ interface AuthRequest extends Request {
     user?: { id: string; email: string; role: string };
 }
 
+// OPTIMIZATION: Cache roles to avoid fetching on every request (roles rarely change)
+let cachedRoles: Record<string, any> | null = null;
+let rolesCacheTime = 0;
+const ROLES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function getCachedRoleMap(): Promise<Record<string, any>> {
+    const now = Date.now();
+    if (!cachedRoles || now - rolesCacheTime > ROLES_CACHE_TTL) {
+        const roles = await prisma.role.findMany({
+            include: { permissions: { select: { code: true } } }
+        });
+        cachedRoles = roles.reduce<Record<string, any>>((acc, roleItem) => {
+            acc[roleItem.code] = {
+                ...roleItem,
+                permissions: roleItem.permissions.map(p => p.code)
+            };
+            return acc;
+        }, {});
+        rolesCacheTime = now;
+    }
+    return cachedRoles;
+}
+
 export const listUsers = async (req: Request, res: Response) => {
     try {
         const {
@@ -42,19 +65,8 @@ export const listUsers = async (req: Request, res: Response) => {
             where.isActive = false;
         }
 
-        // Fetch roles separately for mapping
-        const roles = await prisma.role.findMany({
-            include: {
-                permissions: true
-            }
-        });
-        const roleMap = roles.reduce<Record<string, any>>((acc, roleItem) => {
-            acc[roleItem.code] = {
-                ...roleItem,
-                permissions: roleItem.permissions.map(p => p.code)
-            };
-            return acc;
-        }, {});
+        // OPTIMIZATION: Use cached roles instead of fetching every time
+        const roleMap = await getCachedRoleMap();
 
         const result = await paginatedQuery(prisma.user, {
             page: Number(req.query.page),
@@ -70,23 +82,17 @@ export const listUsers = async (req: Request, res: Response) => {
                         vulnerabilityLevel: true,
                     }
                 },
+                // OPTIMIZATION: Only fetch essential officer fields, skip nested relations for list view
                 officerProfile: {
-                // In updateUser (line 182) it uses `include: { officerProfile: true }`.
-                // However, in my verify script I used `beatOfficer`.
-                // Let's check `userController.ts` updateUser again.
-                // Line 182: `include: { officerProfile: true }`.
-                // Wait, in `updateUser` snippet: `if (existing.officerProfile)`.
-                // So the relation name is `officerProfile`. I will use `officerProfile`.
                     select: {
                         id: true,
                         rank: true,
                         name: true,
                         badgeNumber: true,
-                        SubDivision: { select: { id: true, name: true } },
-                        District: { select: { id: true, name: true } },
-                        Range: { select: { id: true, name: true } },
-                        PoliceStation: { select: { id: true, name: true } },
-                        Beat: { select: { id: true, name: true } },
+                        // Fetch only IDs for list view, full names can be fetched on detail view
+                        districtId: true,
+                        policeStationId: true,
+                        beatId: true
                     }
                 }
             },

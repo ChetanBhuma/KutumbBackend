@@ -675,6 +675,11 @@ model User {
   ApprovedLeaves OfficerLeave[] @relation("LeaveApprover")
   RejectedLeaves OfficerLeave[] @relation("LeaveRejecter")
   Notification   Notification[]
+
+  // OPTIMIZATION: Add indexes for common query patterns
+  @@index([role])
+  @@index([isActive])
+  @@index([email])
 }
 
 model Visit {
@@ -1078,4 +1083,7 @@ model Notification {
   @@index([userId])
   @@index([isRead])
   @@index([createdAt])
+  // OPTIMIZATION: Add composite indexes for common query patterns
+  @@index([userId, createdAt])  // For pagination ordered by date
+  @@index([userId, isRead])      // For unread count queries
 }

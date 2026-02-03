@@ -284,41 +284,42 @@ export const listSystemPermissions = async (_req: Request, res: Response) => {
  */
 export const getRoleMatrix = async (_req: Request, res: Response) => {
     try {
-        // Fetch all roles
-        const roles = await prisma.role.findMany({
-            orderBy: { name: 'asc' }
-        });
-
-        // Get user counts by role (since there is no direct relation)
-        const userCounts = await prisma.user.groupBy({
-            by: ['role'],
-            _count: { role: true }
-        });
+        // OPTIMIZATION: Parallelize all independent queries
+        const [roles, userCounts, users] = await Promise.all([
+            // Query 1: Fetch all roles
+            prisma.role.findMany({
+                orderBy: { name: 'asc' }
+            }),
+            // Query 2: Get user counts by role
+            prisma.user.groupBy({
+                by: ['role'],
+                _count: { role: true }
+            }),
+            // Query 3: Fetch users with minimal data
+            // OPTIMIZATION: Added limit to prevent fetching potentially thousands of users
+            prisma.user.findMany({
+                where: { isActive: true },
+                select: {
+                    id: true,
+                    email: true,
+                    phone: true,
+                    role: true,
+                    isActive: true,
+                    // OPTIMIZATION: Only fetch officerProfile name, skip SeniorCitizen for matrix view
+                    officerProfile: {
+                        select: { name: true }
+                    }
+                },
+                take: 500, // Limit for performance
+                orderBy: { email: 'asc' }
+            })
+        ]);
 
         // Create a map of role code -> count
         const countMap = userCounts.reduce((acc, curr) => {
             acc[curr.role] = curr._count.role;
             return acc;
         }, {} as Record<string, number>);
-
-        // Fetch users for the matrix view
-        const users = await prisma.user.findMany({
-            where: { isActive: true },
-            select: {
-                id: true,
-                email: true,
-                phone: true,
-                role: true,
-                isActive: true,
-                SeniorCitizen: {
-                    select: { fullName: true }
-                },
-                officerProfile: {
-                    select: { name: true }
-                }
-            },
-            orderBy: { email: 'asc' }
-        });
 
         // Transform users to flat structure expected by frontend
         const transformedUsers = users.map(user => ({
@@ -327,7 +328,7 @@ export const getRoleMatrix = async (_req: Request, res: Response) => {
             phone: user.phone,
             roleCode: user.role,
             isActive: user.isActive,
-            displayName: user.SeniorCitizen?.fullName || user.officerProfile?.name || user.email.split('@')[0]
+            displayName: user.officerProfile?.name || user.email.split('@')[0]
         }));
 
         // Transform roles to include user count from the map
