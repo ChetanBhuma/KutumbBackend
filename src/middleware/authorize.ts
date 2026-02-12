@@ -25,8 +25,8 @@ export const requirePermission = (permission: Permission) => {
         const userRole = req.user.role as Role;
 
         if (!hasPermission(userRole, permission)) {
-            console.log(`[AuthDebug] Check Failed. Role: ${userRole}, Required: ${permission}, HasPermission: ${hasPermission(userRole, permission)}`);
-            console.log(`[AuthDebug] RolePermissions:`, RolePermissions[userRole]);
+
+
 
             // Log authorization failure
             auditLogger.warn('Authorization failed', {

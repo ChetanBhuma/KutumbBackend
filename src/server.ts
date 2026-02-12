@@ -58,7 +58,6 @@ registerEventListeners();
 
 try {
     httpServer.listen(PORT, '0.0.0.0', () => {
-        console.log('[DEBUG] Server listen callback triggered');
         logger.info(`Server running on port ${PORT} in ${config.env} mode`);
         logger.info(`API Documentation: http://localhost:${PORT}/api/${config.apiVersion}/docs`);
         logger.info(`Health Check: http://localhost:${PORT}/health`);

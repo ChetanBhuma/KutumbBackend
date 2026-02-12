@@ -162,17 +162,7 @@ export class OfficerAuthController {
                 }
             });
 
-            console.log('[AuthDebug] Officer Login:', {
-                userRole: user.role,
-                resolvedRole: resolvedRole,
-                officerBadge: officer.badgeNumber
-            });
-
-            console.log('[AuthDebug] Raw Permission Codes from DB:', JSON.stringify(permissionCodes));
-
             const permissions = permissionCodes?.permissions.map(p => p.code) || [];
-
-            console.log('[AuthDebug] Mapped Permissions:', permissions);
 
             res.json({
                 success: true,

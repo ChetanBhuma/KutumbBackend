@@ -68,19 +68,13 @@ export class CitizenController {
                 where,
                 include: {
                     PoliceStation: {
-                        select: { id: true, name: true }
+                        select: { id: true, name: true, code: true }
                     },
                     Beat: {
-                        select: { id: true, name: true }
+                        select: { id: true, name: true, code: true }
                     },
-                    // OPTIMIZATION: Use counts instead of full relations for list view
-                    // Full data is fetched in getById for detail view
-                    _count: {
-                        select: {
-                            FamilyMember: true,
-                            EmergencyContact: true
-                        }
-                    }
+                    FamilyMember: true,
+                    EmergencyContact: true
                 },
                 orderBy: buildOrderBy(req.query, { createdAt: 'desc' })
             });
@@ -365,15 +359,6 @@ export class CitizenController {
                 delete mainData[field];
             });
 
-            console.log('[updateProfile] Citizen ID:', id);
-            console.log('[updateProfile] Fields to update:', Object.keys(mainData));
-            console.log('[updateProfile] Sample values:', {
-                rangeId: mainData.rangeId,
-                districtId: mainData.districtId,
-                yearOfRetirement: mainData.yearOfRetirement,
-                pincode: mainData.pincode,
-                pinCode: mainData.pinCode
-            });
 
             // Update citizen
             let citizen;

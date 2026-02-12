@@ -142,7 +142,6 @@ export const createVerificationRequest = async (data: CreateVerificationRequestD
             }
 
             // 4. Assign to selected officer
-            console.log(`Auto-assigning verification request ${request.id} to officer ${selectedOfficer.id} (${selectedOfficer.name})`);
             await assignVerificationRequest(request.id, selectedOfficer.id);
 
             // Update the local request object to reflect assignment status for return

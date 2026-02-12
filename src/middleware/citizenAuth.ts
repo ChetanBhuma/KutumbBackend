@@ -22,7 +22,8 @@ export const authenticateCitizen = async (
         try {
             const payload = jwt.verify(token, config.jwt.secret) as any;
 
-            console.log('DEBUG: Auth Middleware Payload:', JSON.stringify(payload)); // Added Debug Log
+
+
 
             if (payload.role !== Role.CITIZEN) {
                 console.error('DEBUG: Invalid role in token:', payload.role);

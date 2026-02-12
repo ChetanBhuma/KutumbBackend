@@ -1448,7 +1448,8 @@ export const setupSwagger = (app: Express, basePath: string = '/api-docs') => {
         res.send(swaggerSpec);
     });
 
-    console.log(`📚 Swagger documentation available at ${docsPath}`);
+
+
 };
 
 export default swaggerSpec;

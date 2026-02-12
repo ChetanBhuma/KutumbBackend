@@ -451,14 +451,14 @@ router.post(
             const { documentType } = req.body;
             const file = (req as any).file;
 
-            console.log(`[Upload] Starting upload for citizen ${id}, type: ${documentType}`);
+
 
             if (!file) {
                 console.error('[Upload] No file received by multer');
                 return res.status(400).json({ success: false, error: { message: 'No file uploaded' } });
             }
 
-            console.log(`[Upload] File received: ${file.originalname} (${file.size} bytes)`);
+
 
             const { prisma } = await import('../config/database');
             const { cloudStorage } = await import('../services/cloudStorageService');
@@ -467,7 +467,7 @@ router.post(
             let fileUrl;
             try {
                 fileUrl = await cloudStorage.uploadFile(file.path, `${documentType}/${id}/${file.filename}`, file.mimetype);
-                console.log(`[Upload] File processed by storage service: ${fileUrl}`);
+
             } catch (storageError) {
                 console.error('[Upload] Storage service error:', storageError);
                 return res.status(500).json({ success: false, error: { message: 'Storage service failed', details: storageError } });
@@ -486,7 +486,7 @@ router.post(
                 }
             });
 
-            console.log('[Upload] Document record created:', document.id);
+
             return res.json({ success: true, data: { document } });
         } catch (error) {
             console.error('[Upload] Critical error:', error);

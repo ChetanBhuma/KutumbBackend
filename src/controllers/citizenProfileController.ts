@@ -98,7 +98,7 @@ export class CitizenProfileController {
                 });
             }
 
-            console.log('DEBUG: getProfile for citizenId:', citizenId);
+
 
             const citizen = await db.seniorCitizen.findUnique({
                 where: { id: citizenId },
@@ -220,7 +220,7 @@ export class CitizenProfileController {
                 ...flatUpdates
             } = req.body;
 
-            console.log('DEBUG: updateProfile Payload:', JSON.stringify(flatUpdates, null, 2));
+
 
             // Simple fields mapping
             const allowedUpdates = [
@@ -280,7 +280,7 @@ export class CitizenProfileController {
                 }
             });
 
-            console.log('DEBUG: Processed Updates:', JSON.stringify(updates, null, 2));
+
 
             // Remove empty string dateOfBirth to prevent Prisma error (field is DateTime)
             if (typeof updates.dateOfBirth === 'string' && !updates.dateOfBirth) {
@@ -335,7 +335,7 @@ export class CitizenProfileController {
                 }
 
                 // 2. Update main profile
-                console.log('DEBUG: Updating SeniorCitizen with:', JSON.stringify(updates, null, 2));
+
                 await tx.seniorCitizen.update({
                     where: { id: citizenId },
                     data: updates
@@ -801,11 +801,6 @@ export class CitizenProfileController {
      */
     static async uploadDocument(req: AuthRequest, res: Response, next: NextFunction) {
         try {
-            console.log('DEBUG: uploadDocument called', {
-                headers: req.headers,
-                body: req.body,
-                file: req.file ? { ...req.file, buffer: undefined } : 'MISSING'
-            });
 
             let citizenId = req.user?.citizenId;
 
@@ -827,7 +822,7 @@ export class CitizenProfileController {
                     citizenId = existing.id;
                 } else {
                     // Create new placeholder citizen
-                    console.log(`DEBUG: Auto-creating citizen for upload: ${mobile}`);
+
                     const newCitizen = await db.seniorCitizen.create({
                         data: {
                             mobileNumber: mobile,
@@ -871,19 +866,19 @@ export class CitizenProfileController {
 
             // Upload to cloud storage
             const fileKey = `${folder}/${citizenId}/${Date.now()}_${req.file.originalname}`;
-            console.log(`DEBUG: Uploading to cloud/local. Key: ${fileKey}`);
+
 
             const fileUrl = await cloudStorage.uploadFile(req.file.path, fileKey, req.file.mimetype);
-            console.log(`DEBUG: Upload successful. URL: ${fileUrl}`);
+
 
             // Clean up local file ONLY if we are using cloud storage (URL starts with http)
             // If local, fileUrl is likely valid relative path, so we keep the file.
             const isCloudUrl = fileUrl.startsWith('http');
             if (isCloudUrl && req.file.path && fs.existsSync(req.file.path)) {
-                console.log('DEBUG: Cleaning up local temp file');
+
                 fs.unlinkSync(req.file.path);
             } else {
-                console.log('DEBUG: Keeping local file for local storage mode');
+
             }
 
             const document = await db.document.create({
