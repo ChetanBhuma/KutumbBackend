@@ -234,42 +234,32 @@ export class CitizenController {
                 }
             });
 
-            // Auto-assign Beat Officer logic
-            const { OfficerAssignmentService } = await import('../services/officerAssignmentService');
-            let assignedOfficerId: string | null = null;
-
-            if (citizen.beatId || citizen.policeStationId) {
-                assignedOfficerId = await OfficerAssignmentService.assignOfficerToCitizen(citizen.id, citizen.beatId, citizen.policeStationId || undefined);
-            }
-
-            if (assignedOfficerId && citizen.policeStationId) {
-                // Create Scheduled Visit
-                await prisma.visit.create({
-                    data: {
-                        seniorCitizenId: citizen.id,
-                        officerId: assignedOfficerId,
-                        policeStationId: citizen.policeStationId,
-                        visitType: 'Verification',
-                        status: 'SCHEDULED',
-                        scheduledDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // Next day
-                        notes: 'Auto-scheduled verification visit'
-                    }
-                });
-            }
+            // Create Verification Request for SHO assignment (Decoupled from auto-assignment)
+            await prisma.verificationRequest.create({
+                data: {
+                    entityType: 'SeniorCitizen',
+                    entityId: citizen.id,
+                    seniorCitizenId: citizen.id,
+                    requestedBy: req.user?.id || req.user?.email || 'Admin',
+                    priority: 'Normal',
+                    status: 'PENDING',
+                    remarks: 'Manual registration verification - Awaiting SHO officer assignment'
+                }
+            });
 
             // Log creation
-            auditLogger.info('Citizen created successfully', {
+            auditLogger.info('Citizen created successfully, verification request pending SHO assignment', {
                 citizenId: citizen.id,
                 citizenName: citizen.fullName,
-                assignedOfficerId,
+                policeStationId: citizen.policeStationId,
                 createdBy: req.user?.email,
                 hasMedicalHistory: !!medicalHistory
             });
 
             res.status(201).json({
                 success: true,
-                data: { citizen, assignedOfficerId },
-                message: 'Citizen registered successfully'
+                data: { citizen },
+                message: 'Citizen registered successfully. Verification request queued for SHO assignment.'
             });
         } catch (error) {
             next(error);

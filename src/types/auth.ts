@@ -10,6 +10,11 @@ export enum Role {
 }
 
 export enum Permission {
+    // Dashboard
+    DASHBOARD_ADMIN_VIEW = 'dashboard.admin.view',
+    DASHBOARD_OFFICER_VIEW = 'dashboard.officer.view',
+    DASHBOARD_CITIZEN_VIEW = 'dashboard.citizen.view',
+
     // Citizens
     CITIZENS_READ = 'citizens.read',
     CITIZENS_WRITE = 'citizens.write',
@@ -58,6 +63,7 @@ export const RolePermissions: Record<Role, Permission[]> = {
     [Role.SUPER_ADMIN]: Object.values(Permission),
 
     [Role.ADMIN]: [
+        Permission.DASHBOARD_ADMIN_VIEW,
         Permission.CITIZENS_READ,
         Permission.CITIZENS_WRITE,
         Permission.OFFICERS_READ,
@@ -78,6 +84,7 @@ export const RolePermissions: Record<Role, Permission[]> = {
     ],
 
     [Role.OFFICER]: [
+        Permission.DASHBOARD_OFFICER_VIEW,
         Permission.CITIZENS_READ,
         Permission.VISITS_READ,
         Permission.VISITS_COMPLETE,

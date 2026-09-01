@@ -656,9 +656,11 @@ export class CitizenPortalController {
                     mobileNumber: citizenData.mobileNumber,
                     email: citizenData.email,
                     permanentAddress: citizenData.address, // Mapped from 'address'
-                    presentAddress: citizenData.address,   // Assuming same for now
                     addressLine1: citizenData.addressLine1,
                     addressLine2: citizenData.addressLine2,
+                    addressType: citizenData.addressType || 'HOME',
+                    city: citizenData.city || 'Delhi',
+                    state: citizenData.state || 'Delhi',
 
                     // Relations using CONNECT strategy
                     District: citizenData.districtId ? { connect: { id: citizenData.districtId } } : undefined,
@@ -999,6 +1001,22 @@ export class CitizenPortalController {
             const where = buildWhereClause(req.query, {
                 exactMatchFields: ['status']
             });
+
+            // Apply Data Scope
+            const scope = req.dataScope;
+            if (scope && scope.level !== 'ALL') {
+                if (scope.level === 'RANGE' && scope.jurisdictionIds.rangeId) {
+                    where.SeniorCitizen = { ...where.SeniorCitizen, rangeId: scope.jurisdictionIds.rangeId };
+                } else if (scope.level === 'DISTRICT' && scope.jurisdictionIds.districtId) {
+                    where.SeniorCitizen = { ...where.SeniorCitizen, districtId: scope.jurisdictionIds.districtId };
+                } else if (scope.level === 'SUBDIVISION' && scope.jurisdictionIds.subDivisionId) {
+                    where.SeniorCitizen = { ...where.SeniorCitizen, subDivisionId: scope.jurisdictionIds.subDivisionId };
+                } else if (scope.level === 'POLICE_STATION' && scope.jurisdictionIds.policeStationId) {
+                    where.SeniorCitizen = { ...where.SeniorCitizen, policeStationId: scope.jurisdictionIds.policeStationId };
+                } else if (scope.level === 'BEAT' && scope.jurisdictionIds.beatId) {
+                    where.SeniorCitizen = { ...where.SeniorCitizen, beatId: scope.jurisdictionIds.beatId };
+                }
+            }
 
             const result = await paginatedQuery(db.visitRequest, {
                 page: Number(req.query.page),

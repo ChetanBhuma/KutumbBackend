@@ -8,11 +8,13 @@ import { validate } from '../middleware/validate';
 import { ValidationRules } from '../middleware/validation';
 import { auditAction } from '../middleware/auditMiddleware';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { dataScopeMiddleware } from '../middleware/dataScopeMiddleware';
 
 const router = Router();
 
-// All routes require authentication
+// All routes require authentication and data scope filtering
 router.use(authenticate);
+router.use(dataScopeMiddleware);
 
 /**
  * @swagger

@@ -64,18 +64,34 @@ export class ReportController {
                 }
             }
 
+            const verificationWhere: any = { status: 'PENDING' };
+            const visitRequestWhere: any = { status: 'Pending' };
+
+            if (citizenWhere.policeStationId) {
+                verificationWhere.seniorCitizen = { policeStationId: citizenWhere.policeStationId };
+                visitRequestWhere.SeniorCitizen = { policeStationId: citizenWhere.policeStationId };
+            } else if (citizenWhere.districtId) {
+                verificationWhere.seniorCitizen = { districtId: citizenWhere.districtId };
+                visitRequestWhere.SeniorCitizen = { districtId: citizenWhere.districtId };
+            } else if (citizenWhere.rangeId) {
+                verificationWhere.seniorCitizen = { rangeId: citizenWhere.rangeId };
+                visitRequestWhere.SeniorCitizen = { rangeId: citizenWhere.rangeId };
+            }
+
             const [
                 totalCitizens,
                 verifiedCitizens,
                 pendingCitizens,
                 highVulnerability,
                 totalOfficers,
-                activeOfficers,
+                activeOfficersList,
                 totalVisits,
                 scheduledVisits,
                 inProgressVisits,
                 completedVisits,
                 cancelledVisits,
+                pendingVerificationRequests,
+                pendingVisitRequests,
                 totalSOS,
                 activeSOS,
                 resolvedSOS,
@@ -86,12 +102,23 @@ export class ReportController {
                 prisma.seniorCitizen.count({ where: { ...citizenWhere, idVerificationStatus: 'Pending' } }),
                 prisma.seniorCitizen.count({ where: { ...citizenWhere, vulnerabilityLevel: 'High' } }),
                 prisma.beatOfficer.count({ where: officerWhere }),
-                prisma.beatOfficer.count({ where: { ...officerWhere, isActive: true } }),
+                prisma.beatOfficer.findMany({
+                    where: { ...officerWhere, isActive: true },
+                    select: {
+                        id: true,
+                        beatId: true,
+                        Beat: {
+                            select: { id: true, policeStationId: true }
+                        }
+                    }
+                }),
                 prisma.visit.count({ where: visitWhere }),
                 prisma.visit.count({ where: { ...visitWhere, status: 'SCHEDULED' } }),
                 prisma.visit.count({ where: { ...visitWhere, status: 'IN_PROGRESS' } }),
                 prisma.visit.count({ where: { ...visitWhere, status: 'COMPLETED' } }),
                 prisma.visit.count({ where: { ...visitWhere, status: 'CANCELLED' } }),
+                prisma.verificationRequest.count({ where: verificationWhere }),
+                prisma.visitRequest.count({ where: visitRequestWhere }),
                 prisma.sOSAlert.count({ where: sosWhere }),
                 prisma.sOSAlert.count({ where: { ...sosWhere, status: 'Active' } }),
                 prisma.sOSAlert.count({ where: { ...sosWhere, status: 'Resolved' } }),
@@ -110,6 +137,10 @@ export class ReportController {
                 })
             ]);
 
+            const activeOfficers = activeOfficersList.length;
+            const assignedOfficers = activeOfficersList.filter(o => o.beatId !== null && (!officerWhere.policeStationId || !o.Beat || o.Beat.policeStationId === officerWhere.policeStationId)).length;
+            const unassignedOfficers = Math.max(0, activeOfficers - assignedOfficers);
+
             res.json({
                 success: true,
                 data: {
@@ -121,13 +152,23 @@ export class ReportController {
                     },
                     officers: {
                         total: totalOfficers,
-                        active: activeOfficers
+                        active: activeOfficers,
+                        assigned: assignedOfficers,
+                        unassigned: unassignedOfficers
                     },
                     visits: {
                         total: totalVisits,
                         completed: completedVisits,
                         pending: scheduledVisits + inProgressVisits,
+                        scheduled: scheduledVisits,
+                        inProgress: inProgressVisits,
+                        cancelled: cancelledVisits,
                         completionRate: totalVisits > 0 ? ((completedVisits / totalVisits) * 100).toFixed(2) : 0
+                    },
+                    pendingQueues: {
+                        verificationRequests: pendingVerificationRequests,
+                        visitRequests: pendingVisitRequests,
+                        totalPendingAction: pendingVerificationRequests + pendingVisitRequests
                     },
                     sos: {
                         total: totalSOS,

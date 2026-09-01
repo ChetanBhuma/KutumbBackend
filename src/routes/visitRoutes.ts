@@ -8,11 +8,13 @@ import { validate } from '../middleware/validate';
 import { ValidationRules } from '../middleware/validation';
 import { auditCRUD, auditAction } from '../middleware/auditMiddleware';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { dataScopeMiddleware } from '../middleware/dataScopeMiddleware';
 
 const router = Router();
 
-// All routes require authentication
+// All routes require authentication and data scope filtering
 router.use(authenticate);
+router.use(dataScopeMiddleware);
 
 /**
  * @swagger
@@ -442,7 +444,7 @@ router.post(
     auditAction({ action: 'CANCEL_VISIT', resource: 'visit', includeRequestBody: true }),
     [
         ValidationRules.id('id'),
-        body('reason').notEmpty().withMessage('Cancellation reason is required'),
+        body('reason').optional().isString(),
         validate
     ],
     asyncHandler(VisitController.cancel)

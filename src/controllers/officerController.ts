@@ -55,7 +55,14 @@ export class OfficerController {
                         select: { id: true, name: true }
                     },
                     Beat: {
-                        select: { id: true, name: true, code: true }
+                        select: {
+                            id: true,
+                            name: true,
+                            code: true,
+                            _count: {
+                                select: { SeniorCitizen: true }
+                            }
+                        }
                     },
                     _count: {
                         select: { Visit: true }
@@ -64,9 +71,18 @@ export class OfficerController {
                 orderBy: buildOrderBy(req.query, { createdAt: 'desc' })
             });
 
+            // Map assignedCitizens count onto each officer item for easy consumption
+            const itemsWithCounts = result.items.map((officer: any) => ({
+                ...officer,
+                assignedCitizens: officer.Beat?._count?.SeniorCitizen || 0
+            }));
+
             res.json({
                 success: true,
-                data: result
+                data: {
+                    ...result,
+                    items: itemsWithCounts
+                }
             });
         } catch (error) {
             next(error);
@@ -295,12 +311,21 @@ export class OfficerController {
             const { id } = req.params;
             const { beatId } = req.body;
 
-            // Verify beat exists only if beatId is provided
+            // Verify officer exists
+            const targetOfficer = await prisma.beatOfficer.findUnique({ where: { id } });
+            if (!targetOfficer) {
+                throw new AppError('Officer not found', 404);
+            }
+
+            // Verify beat exists and belongs to same police station if beatId is provided
             let beat = null;
             if (beatId) {
                 beat = await prisma.beat.findUnique({ where: { id: beatId } });
                 if (!beat) {
                     throw new AppError('Beat not found', 404);
+                }
+                if (targetOfficer.policeStationId && beat.policeStationId !== targetOfficer.policeStationId) {
+                    throw new AppError('Beat must belong to the officer\'s Police Station', 400);
                 }
             }
 

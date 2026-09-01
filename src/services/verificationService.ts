@@ -66,155 +66,95 @@ export const createVerificationRequest = async (data: CreateVerificationRequestD
         request.entityType
     );
 
-    // Auto-assign to Beat Officer if possible
-    try {
-        const citizen = await prisma.seniorCitizen.findUnique({
-            where: { id: data.seniorCitizenId }
-        });
-
-        if (citizen && citizen.policeStationId) {
-            // 1. Get all active officers at the police station
-            // IMPORTANT: Only assign to officers who are explicitly mapped to this police station AND have a beat assignment
-            const officers = await prisma.beatOfficer.findMany({
-                where: {
-                    policeStationId: citizen.policeStationId, // Must match citizen's police station
-                    isActive: true,
-                    // Exclude officers without a police station assignment (higher-rank officers)
-                    NOT: {
-                        OR: [
-                            { policeStationId: null },
-                            { beatId: null }  // NEW: Only officers with beat assignments
-                        ]
-                    }
-                },
-                select: { id: true, name: true, beatId: true, badgeNumber: true, policeStationId: true }
-            });
-
-            if (officers.length === 0) {
-                auditLogger.warn('Auto-assignment skipped: No active beat officers found at police station', {
-                    requestId: request.id,
-                    citizenId: citizen.id,
-                    citizenName: citizen.fullName,
-                    policeStationId: citizen.policeStationId,
-                    beatId: citizen.beatId,
-                    reason: 'NO_ACTIVE_BEAT_OFFICERS_AT_STATION'
-                });
-                return request;
-            }
-
-            // 2. Calculate workload for each officer (pending + in-progress visits)
-            const officersWithWorkload = await Promise.all(
-                officers.map(async (officer) => {
-                    const workload = await prisma.visit.count({
-                        where: {
-                            officerId: officer.id,
-                            status: { in: ['SCHEDULED', 'IN_PROGRESS'] }
-                        }
-                    });
-                    return { ...officer, workload };
-                })
-            );
-
-            // 3. Select officer with load balancing
-            let selectedOfficer;
-
-            // Prefer officers in the same beat (if citizen has beatId)
-            if (citizen.beatId) {
-                const beatOfficers = officersWithWorkload.filter(
-                    o => o.beatId === citizen.beatId
-                );
-
-                if (beatOfficers.length > 0) {
-                    // Pick officer with least workload in the beat
-                    selectedOfficer = beatOfficers.reduce((min, officer) =>
-                        officer.workload < min.workload ? officer : min
-                    );
-
-                }
-            }
-
-            // Fallback: Pick officer with least workload in the entire station
-            if (!selectedOfficer) {
-                selectedOfficer = officersWithWorkload.reduce((min, officer) =>
-                    officer.workload < min.workload ? officer : min
-                );
-
-            }
-
-            // 4. Assign to selected officer
-            await assignVerificationRequest(request.id, selectedOfficer.id);
-
-            // Update the local request object to reflect assignment status for return
-            (request as any).assignedTo = selectedOfficer.id;
-            (request as any).status = 'IN_PROGRESS';
-        }
-    } catch (err) {
-        console.error('Failed to auto-assign verification request:', err);
-        // Continue, do not fail the request creation
-    }
-
+    // Note: Auto-assignment is intentionally decoupled.
+    // The Police Station SHO will assign a field officer via the SHO dashboard.
     return request;
 };
 
 /**
- * Assign verification request to an officer
+ * Assign verification request to an officer (invoked by SHO / Admin)
  */
-export const assignVerificationRequest = async (requestId: string, officerId: string) => {
+export const assignVerificationRequest = async (
+    requestId: string,
+    officerId: string,
+    options?: { scheduledDate?: Date; notes?: string; assignedBy?: string }
+) => {
+    const existingRequest = await prisma.verificationRequest.findUnique({
+        where: { id: requestId },
+        include: { seniorCitizen: true }
+    });
+
+    if (!existingRequest) {
+        throw new Error('Verification request not found');
+    }
+
+    const citizen = existingRequest.seniorCitizen;
+    const officer = await prisma.beatOfficer.findUnique({ where: { id: officerId } });
+
+    if (!officer || !officer.isActive) {
+        throw new Error('Selected officer not found or is inactive');
+    }
+
+    // STRICT VALIDATION: Ensure officer belongs to the citizen's police station
+    if (citizen.policeStationId && officer.policeStationId && citizen.policeStationId !== officer.policeStationId) {
+        throw new Error('Officer must belong to the same Police Station as the Senior Citizen');
+    }
+
     // 1. Update the request status
     const request = await prisma.verificationRequest.update({
         where: { id: requestId },
         data: {
             assignedTo: officerId,
             assignedAt: new Date(),
-            status: 'IN_PROGRESS'
+            status: 'IN_PROGRESS',
+            remarks: options?.notes ? `${existingRequest.remarks || ''}\n[SHO Note]: ${options.notes}`.trim() : existingRequest.remarks
         },
         include: { seniorCitizen: true }
     });
 
-    auditLogger.info('Verification request assigned', {
+    auditLogger.info('Verification request assigned by SHO/Admin', {
         requestId,
-        assignedTo: officerId
+        assignedTo: officerId,
+        officerName: officer.name,
+        policeStationId: officer.policeStationId,
+        assignedBy: options?.assignedBy
     });
 
-    // 2. Create the corresponding Visit entity (Workflow Phase 2)
+    // 2. Create the corresponding Visit entity
     try {
-        const citizen = request.seniorCitizen;
-        // Fetch officer to get station/beat if citizen doesn't have it (fallback)
-        const officer = await prisma.beatOfficer.findUnique({ where: { id: officerId } });
+        const scheduledDate = options?.scheduledDate ? new Date(options.scheduledDate) : new Date();
 
-        if (officer) {
-            const visit = await prisma.visit.create({
-                data: {
-                    seniorCitizenId: citizen.id,
-                    officerId: officerId,
-                    policeStationId: officer.policeStationId || '', // Use officer's station as source of truth for the visit context
-                    beatId: officer.beatId || citizen.beatId,
-                    visitType: 'Verification',
-                    status: 'SCHEDULED',
-                    scheduledDate: new Date(), // scheduled for today
-                    priority: request.priority || 'Normal'
-                }
-            });
-
-            auditLogger.info('Verification Visit created for request', {
-                requestId,
-                visitId: visit.id
-            });
-
-            // Notify Officer? (NotificationService likely handles Visit creation alerts)
-            if (officer.mobileNumber) {
-                 NotificationService.sendOfficerTaskAssignment(
-                    officer.mobileNumber,
-                    citizen.fullName,
-                    visit.visitType,
-                    visit.scheduledDate
-                 ).catch(err => console.error("Failed to notify officer", err));
+        const visit = await prisma.visit.create({
+            data: {
+                seniorCitizenId: citizen.id,
+                officerId: officerId,
+                policeStationId: officer.policeStationId || citizen.policeStationId || '',
+                beatId: officer.beatId || citizen.beatId,
+                visitType: 'Verification',
+                status: 'SCHEDULED',
+                scheduledDate,
+                notes: options?.notes || 'Verification visit assigned by SHO',
+                priority: request.priority || 'Normal'
             }
+        });
+
+        auditLogger.info('Verification Visit created for request', {
+            requestId,
+            visitId: visit.id,
+            officerId: officer.id
+        });
+
+        if (officer.mobileNumber) {
+            NotificationService.sendOfficerTaskAssignment(
+                officer.mobileNumber,
+                citizen.fullName,
+                visit.visitType,
+                visit.scheduledDate
+            ).catch(err => console.error('Failed to notify officer', err));
         }
     } catch (error) {
         console.error('Failed to create Visit for Verification Request:', error);
-        // We do not roll back the assignment, but log the error.
-        // In a strict transactional system we implies using $transaction, but this service function is often called standalone.
+        throw error;
     }
 
     return request;
@@ -304,7 +244,7 @@ export const updateVerificationStatus = async (
 };
 
 /**
- * Get verification requests with filters
+ * Get verification requests with filters and jurisdiction scoping
  */
 export const getVerificationRequests = async (filters: {
     status?: VerificationStatus;
@@ -312,22 +252,47 @@ export const getVerificationRequests = async (filters: {
     assignedTo?: string;
     seniorCitizenId?: string;
     priority?: VerificationPriority;
+    scope?: import('../middleware/dataScopeMiddleware').DataScope;
 }) => {
+    const where: any = {
+        status: filters.status,
+        entityType: filters.entityType,
+        assignedTo: filters.assignedTo,
+        seniorCitizenId: filters.seniorCitizenId,
+        priority: filters.priority
+    };
+
+    const scope = filters.scope;
+    if (scope && scope.level !== 'ALL') {
+        if (scope.level === 'RANGE' && scope.jurisdictionIds.rangeId) {
+            where.seniorCitizen = { rangeId: scope.jurisdictionIds.rangeId };
+        } else if (scope.level === 'DISTRICT' && scope.jurisdictionIds.districtId) {
+            where.seniorCitizen = { districtId: scope.jurisdictionIds.districtId };
+        } else if (scope.level === 'SUBDIVISION' && scope.jurisdictionIds.subDivisionId) {
+            where.seniorCitizen = { subDivisionId: scope.jurisdictionIds.subDivisionId };
+        } else if (scope.level === 'POLICE_STATION' && scope.jurisdictionIds.policeStationId) {
+            where.seniorCitizen = { policeStationId: scope.jurisdictionIds.policeStationId };
+        } else if (scope.level === 'BEAT' && scope.jurisdictionIds.beatId) {
+            where.seniorCitizen = { beatId: scope.jurisdictionIds.beatId };
+        }
+    }
+
     return await prisma.verificationRequest.findMany({
-        where: {
-            status: filters.status,
-            entityType: filters.entityType,
-            assignedTo: filters.assignedTo,
-            seniorCitizenId: filters.seniorCitizenId,
-            priority: filters.priority
-        },
+        where,
         include: {
             seniorCitizen: {
                 select: {
                     id: true,
                     fullName: true,
                     mobileNumber: true,
-                    permanentAddress: true
+                    permanentAddress: true,
+                    policeStationId: true,
+                    PoliceStation: {
+                        select: { name: true }
+                    },
+                    Beat: {
+                        select: { name: true }
+                    }
                 }
             }
         },
@@ -344,11 +309,27 @@ export const getVerificationRequests = async (filters: {
 export const getVerificationStatistics = async (filters?: {
     entityType?: VerificationEntityType;
     assignedTo?: string;
+    scope?: import('../middleware/dataScopeMiddleware').DataScope;
 }) => {
-    const where = {
+    const where: any = {
         entityType: filters?.entityType,
         assignedTo: filters?.assignedTo
     };
+
+    const scope = filters?.scope;
+    if (scope && scope.level !== 'ALL') {
+        if (scope.level === 'RANGE' && scope.jurisdictionIds.rangeId) {
+            where.seniorCitizen = { rangeId: scope.jurisdictionIds.rangeId };
+        } else if (scope.level === 'DISTRICT' && scope.jurisdictionIds.districtId) {
+            where.seniorCitizen = { districtId: scope.jurisdictionIds.districtId };
+        } else if (scope.level === 'SUBDIVISION' && scope.jurisdictionIds.subDivisionId) {
+            where.seniorCitizen = { subDivisionId: scope.jurisdictionIds.subDivisionId };
+        } else if (scope.level === 'POLICE_STATION' && scope.jurisdictionIds.policeStationId) {
+            where.seniorCitizen = { policeStationId: scope.jurisdictionIds.policeStationId };
+        } else if (scope.level === 'BEAT' && scope.jurisdictionIds.beatId) {
+            where.seniorCitizen = { beatId: scope.jurisdictionIds.beatId };
+        }
+    }
 
     const [total, pending, inProgress, approved, rejected] = await Promise.all([
         prisma.verificationRequest.count({ where }),

@@ -1,15 +1,15 @@
 import rateLimit from 'express-rate-limit';
 import { config } from '../config';
 
-const isDevEnv = config.env === 'development';
+const isDevEnv = config.env === 'development' || !process.env.NODE_ENV;
 
 /**
  * General API rate limiter
- * 100 requests per 15 minutes per IP (5000 in dev)
+ * 5000 requests per 15 minutes per IP (50000 in dev / localhost)
  */
 export const apiLimiter = rateLimit({
     windowMs: config.rateLimit.windowMs,
-    max: isDevEnv ? 50000 : config.rateLimit.maxRequests,
+    max: isDevEnv ? 50000 : (parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '5000', 10)),
     message: {
         success: false,
         error: {
@@ -18,10 +18,20 @@ export const apiLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
-    // Skip rate limiting for trusted IPs (optional)
+    // Skip rate limiting for localhost / loopback IPs and trusted IPs
     skip: (req) => {
+        const ip = req.ip || req.socket.remoteAddress || '';
+        if (
+            ip === '127.0.0.1' ||
+            ip === '::1' ||
+            ip === '::ffff:127.0.0.1' ||
+            ip.includes('127.0.0.1') ||
+            ip === 'localhost'
+        ) {
+            return true;
+        }
         const trustedIPs = process.env.TRUSTED_IPS?.split(',') || [];
-        return trustedIPs.includes(req.ip || '');
+        return trustedIPs.includes(ip);
     }
 });
 

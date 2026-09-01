@@ -1,17 +1,19 @@
 import { Router } from 'express';
 import { VerificationController } from '../controllers/verificationController';
 import { authenticate } from '../middleware/authenticate';
-import { requirePermission, requireRole } from '../middleware/authorize';
+import { requirePermission, requireRole, requireAnyPermission } from '../middleware/authorize';
 import { Permission, Role } from '../types/auth';
 import { body, query } from 'express-validator';
 import { validate } from '../middleware/validate';
 import { ValidationRules } from '../middleware/validation';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { dataScopeMiddleware } from '../middleware/dataScopeMiddleware';
 
 const router = Router();
 
-// All routes require authentication
+// All routes require authentication and data scope filtering
 router.use(authenticate);
+router.use(dataScopeMiddleware);
 
 /**
  * @route   POST /api/v1/verifications
@@ -85,12 +87,12 @@ router.get(
 
 /**
  * @route   PATCH /api/v1/verifications/:id/assign
- * @desc    Assign verification request to officer
- * @access  Private (ADMIN or SUPER_ADMIN)
+ * @desc    Assign verification request to officer (by SHO / Admin)
+ * @access  Private (VISITS_SCHEDULE, CITIZENS_WRITE, or OFFICERS_MANAGE permission)
  */
 router.patch(
     '/:id/assign',
-    requireRole([Role.ADMIN, Role.SUPER_ADMIN]),
+    requireAnyPermission([Permission.VISITS_SCHEDULE, Permission.CITIZENS_WRITE, Permission.OFFICERS_MANAGE]),
     [
         ValidationRules.id('id'),
         body('officerId').trim().notEmpty().withMessage('Officer ID required'),

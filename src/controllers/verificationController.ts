@@ -50,7 +50,8 @@ export class VerificationController {
                 entityType: entityType as any,
                 assignedTo: assignedTo as string,
                 seniorCitizenId: seniorCitizenId as string,
-                priority: priority as any
+                priority: priority as any,
+                scope: req.dataScope
             });
 
             return res.json({
@@ -86,14 +87,22 @@ export class VerificationController {
     }
 
     /**
-     * Assign verification request to officer
+     * Assign verification request to officer (by SHO / Admin)
      */
     static async assign(req: AuthRequest, res: Response, next: NextFunction) {
         try {
             const { id } = req.params;
-            const { officerId } = req.body;
+            const { officerId, scheduledDate, notes } = req.body;
 
-            const request = await verificationService.assignVerificationRequest(id, officerId);
+            if (!officerId) {
+                throw new AppError('Officer ID is required for assignment', 400);
+            }
+
+            const request = await verificationService.assignVerificationRequest(id, officerId, {
+                scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
+                notes,
+                assignedBy: req.user?.email || req.user?.id
+            });
 
             auditLogger.info('Verification request assigned', {
                 requestId: id,

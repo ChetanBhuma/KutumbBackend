@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/authenticate';
 import { requirePermission } from '../middleware/authorize';
 import { Permission } from '../types/auth';
 import { validate } from '../middleware/validate';
+import { dataScopeMiddleware } from '../middleware/dataScopeMiddleware';
 
 const router = Router();
 
@@ -71,6 +72,7 @@ router.post(
 router.get(
     '/registrations',
     authenticate,
+    dataScopeMiddleware,
     requirePermission(Permission.CITIZENS_READ),
     [
         query('status').optional().isString(),
@@ -82,6 +84,7 @@ router.get(
 router.patch(
     '/registrations/:id/status',
     authenticate,
+    dataScopeMiddleware,
     requirePermission(Permission.CITIZENS_WRITE),
     [
         param('id').notEmpty().withMessage('Registration ID is required'),
@@ -118,6 +121,7 @@ router.post(
 router.get(
     '/visit-requests',
     authenticate,
+    dataScopeMiddleware,
     requirePermission(Permission.VISITS_READ),
     [
         query('status').optional().isString(),

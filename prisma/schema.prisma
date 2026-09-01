@@ -438,6 +438,7 @@ model SeniorCitizen {
   preferredContactMode          String         @default("Call")
   permanentAddress              String
   presentAddress                String?
+  addressType                   String?        @default("HOME")
   pinCode                       String
   gpsLatitude                   Float?
   gpsLongitude                  Float?

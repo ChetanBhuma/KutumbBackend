@@ -1,12 +1,14 @@
 import express from 'express';
 import { ServiceRequestController } from '../controllers/serviceRequestController';
 import { authenticate } from '../middleware/authenticate';
+import { dataScopeMiddleware } from '../middleware/dataScopeMiddleware';
 import { requireRole } from '../middleware/authorize';
 import { Role } from '../types/auth';
 
 const router = express.Router();
 
 router.use(authenticate);
+router.use(dataScopeMiddleware);
 
 // Create service request
 router.post('/', ServiceRequestController.create);
