@@ -246,7 +246,7 @@ router.delete(
  */
 router.post(
     '/:id/assign-beat',
-    requirePermission(Permission.OFFICERS_MANAGE),
+    requireAnyPermission([Permission.OFFICERS_MANAGE, Permission.OFFICERS_WRITE, Permission.OPERATIONS_ROSTER]),
     auditAction({ action: 'ASSIGN_BEAT', resource: 'officer', includeRequestBody: true }),
     [
         ValidationRules.id('id'),
@@ -293,7 +293,7 @@ router.post(
  */
 router.post(
     '/:id/transfer',
-    requirePermission(Permission.OFFICERS_MANAGE),
+    requireAnyPermission([Permission.OFFICERS_MANAGE, Permission.OFFICERS_WRITE, Permission.OPERATIONS_ROSTER]),
     auditAction({ action: 'TRANSFER_OFFICER', resource: 'officer', includeRequestBody: true }),
     [
         ValidationRules.id('id'),
@@ -336,7 +336,7 @@ router.post(
  */
 router.post(
     '/:id/transfer/preview',
-    requirePermission(Permission.OFFICERS_MANAGE),
+    requireAnyPermission([Permission.OFFICERS_MANAGE, Permission.OFFICERS_WRITE, Permission.OPERATIONS_ROSTER]),
     [
         ValidationRules.id('id'),
         body('newBeatId').isString().notEmpty().withMessage('New beat ID is required'),
