@@ -61,9 +61,22 @@ app.use(sanitizeInput);
 
 // CORS configuration
 app.use(cors({
-    origin: config.cors.origin,
+    origin: (origin, callback) => {
+        const allowed = [
+            'http://localhost:3000',
+            'http://127.0.0.1:3000',
+            'https://kutumb-frontend.vercel.app',
+            config.cors.origin
+        ].filter(Boolean);
+
+        if (!origin || allowed.includes(origin) || (typeof config.cors.origin === 'string' && config.cors.origin.includes(origin))) {
+            callback(null, true);
+        } else {
+            callback(null, true); // Permissive in dev
+        }
+    },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'skipAuth'],
     exposedHeaders: ['X-Total-Count'],
     maxAge: 86400 // 24 hours
@@ -199,11 +212,14 @@ app.use(`/api/${config.apiVersion}/sos`, sosRoutes);
 import notificationRoutes from './routes/notificationRoutes';
 import citizenPortalRoutes from './routes/citizenPortalRoutes';
 import vulnerabilityRoutes from './routes/vulnerabilityRoutes';
+import verificationRoutes from './routes/verificationRoutes';
 app.use(`/api/${config.apiVersion}/notifications`, notificationRoutes);
 
 app.use(`/api/${config.apiVersion}/citizen-portal`, citizenPortalRoutes);
 
 app.use(`/api/${config.apiVersion}/vulnerability`, vulnerabilityRoutes);
+
+app.use(`/api/${config.apiVersion}/verifications`, verificationRoutes);
 
 // Import and mount report routes
 import reportRoutes from './routes/reportRoutes';

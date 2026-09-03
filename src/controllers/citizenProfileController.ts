@@ -341,8 +341,23 @@ export class CitizenProfileController {
                     data: updates
                 });
 
-                // NOTE: VerificationRequest is already created during initial registration
-                // No need to create another one here during profile update
+                // Ensure VerificationRequest exists for this senior citizen
+                const existingVerification = await tx.verificationRequest.findFirst({
+                    where: { seniorCitizenId: citizenId }
+                });
+                if (!existingVerification) {
+                    await tx.verificationRequest.create({
+                        data: {
+                            entityType: 'SeniorCitizen',
+                            entityId: citizenId,
+                            seniorCitizenId: citizenId,
+                            requestedBy: citizenId,
+                            priority: 'Normal',
+                            status: 'PENDING',
+                            remarks: 'Citizen profile completion - Awaiting SHO officer assignment'
+                        }
+                    });
+                }
 
                 // 3. Handle Emergency Contacts
                 if (Array.isArray(emergencyContacts)) {

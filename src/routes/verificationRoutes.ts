@@ -24,7 +24,7 @@ router.post(
     '/',
     requirePermission(Permission.CITIZENS_WRITE),
     [
-        body('entityType').isIn(['HouseholdHelp', 'EmergencyContact', 'Tenant', 'Other']).withMessage('Valid entity type required'),
+        body('entityType').isIn(['HouseholdHelp', 'EmergencyContact', 'Tenant', 'SeniorCitizen', 'Other']).withMessage('Valid entity type required'),
         body('entityId').trim().notEmpty().withMessage('Entity ID required'),
         body('seniorCitizenId').trim().notEmpty().withMessage('Citizen ID required'),
         body('priority').optional().isIn(['Low', 'Normal', 'High', 'Urgent']),
@@ -44,8 +44,8 @@ router.get(
     '/',
     requirePermission(Permission.CITIZENS_READ),
     [
-        query('status').optional().isIn(['Pending', 'InProgress', 'Approved', 'Rejected']),
-        query('entityType').optional().isIn(['HouseholdHelp', 'EmergencyContact', 'Tenant', 'Other']),
+        query('status').optional().isIn(['Pending', 'InProgress', 'Approved', 'Rejected', 'PENDING', 'IN_PROGRESS', 'APPROVED', 'REJECTED']),
+        query('entityType').optional().isIn(['HouseholdHelp', 'EmergencyContact', 'Tenant', 'SeniorCitizen', 'Other']),
         query('assignedTo').optional().trim(),
         query('seniorCitizenId').optional().trim(),
         query('priority').optional().isIn(['Low', 'Normal', 'High', 'Urgent']),
@@ -63,7 +63,7 @@ router.get(
     '/statistics',
     requirePermission(Permission.CITIZENS_READ),
     [
-        query('entityType').optional().isIn(['HouseholdHelp', 'EmergencyContact', 'Tenant', 'Other']),
+        query('entityType').optional().isIn(['HouseholdHelp', 'EmergencyContact', 'Tenant', 'SeniorCitizen', 'Other']),
         query('assignedTo').optional().trim(),
         validate
     ],

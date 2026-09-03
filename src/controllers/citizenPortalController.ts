@@ -1029,10 +1029,19 @@ export class CitizenPortalController {
                             fullName: true,
                             mobileNumber: true,
                             vulnerabilityLevel: true,
-                            policeStationName: true,
-                            beatName: true,
-                            preferredVisitDay: true,
-                            preferredVisitTime: true
+                            policeStationId: true,
+                            beatId: true,
+                            PoliceStation: {
+                                select: {
+                                    name: true
+                                }
+                            },
+                            Beat: {
+                                select: {
+                                    name: true
+                                }
+                            },
+                            permanentAddress: true
                         }
                     }
                 },
@@ -1041,7 +1050,10 @@ export class CitizenPortalController {
 
             res.json({
                 success: true,
-                data: result
+                data: {
+                    ...result,
+                    visitRequests: result.items
+                }
             });
         } catch (error) {
             next(error);

@@ -244,22 +244,72 @@ export const updateVerificationStatus = async (
 };
 
 /**
+ * Helper to normalize status strings to VerificationStatus enum values
+ */
+export const normalizeVerificationStatus = (status?: string): VerificationStatus | undefined => {
+    if (!status) return undefined;
+    const s = status.toUpperCase().replace('-', '_');
+    if (s === 'PENDING') return 'PENDING';
+    if (s === 'IN_PROGRESS' || s === 'INPROGRESS') return 'IN_PROGRESS';
+    if (s === 'APPROVED') return 'APPROVED';
+    if (s === 'REJECTED') return 'REJECTED';
+    return undefined;
+};
+
+/**
  * Get verification requests with filters and jurisdiction scoping
  */
 export const getVerificationRequests = async (filters: {
-    status?: VerificationStatus;
+    status?: VerificationStatus | string;
     entityType?: VerificationEntityType;
     assignedTo?: string;
     seniorCitizenId?: string;
     priority?: VerificationPriority;
     scope?: import('../middleware/dataScopeMiddleware').DataScope;
 }) => {
+    const normalizedStatus = normalizeVerificationStatus(filters.status);
+
+    // Auto-heal / backfill: If fetching pending verifications, ensure every unverified citizen has a VerificationRequest
+    if (normalizedStatus === 'PENDING' || !filters.status) {
+        try {
+            const unverifiedCitizens = await prisma.seniorCitizen.findMany({
+                where: {
+                    idVerificationStatus: 'Pending',
+                    VerificationRequest: { none: {} }
+                },
+                select: {
+                    id: true,
+                    fullName: true,
+                    policeStationId: true
+                }
+            });
+
+            if (unverifiedCitizens.length > 0) {
+                for (const citizen of unverifiedCitizens) {
+                    await prisma.verificationRequest.create({
+                        data: {
+                            entityType: 'SeniorCitizen',
+                            entityId: citizen.id,
+                            seniorCitizenId: citizen.id,
+                            requestedBy: 'System',
+                            priority: 'Normal',
+                            status: 'PENDING',
+                            remarks: 'Citizen registration verification - Awaiting SHO officer assignment'
+                        }
+                    }).catch(err => console.error('Failed to auto-create verification request for citizen', citizen.id, err));
+                }
+            }
+        } catch (e) {
+            console.error('Error auto-syncing unverified citizens to VerificationRequests:', e);
+        }
+    }
+
     const where: any = {
-        status: filters.status,
-        entityType: filters.entityType,
-        assignedTo: filters.assignedTo,
-        seniorCitizenId: filters.seniorCitizenId,
-        priority: filters.priority
+        ...(normalizedStatus ? { status: normalizedStatus } : {}),
+        ...(filters.entityType ? { entityType: filters.entityType } : {}),
+        ...(filters.assignedTo ? { assignedTo: filters.assignedTo } : {}),
+        ...(filters.seniorCitizenId ? { seniorCitizenId: filters.seniorCitizenId } : {}),
+        ...(filters.priority ? { priority: filters.priority } : {})
     };
 
     const scope = filters.scope;
@@ -312,8 +362,8 @@ export const getVerificationStatistics = async (filters?: {
     scope?: import('../middleware/dataScopeMiddleware').DataScope;
 }) => {
     const where: any = {
-        entityType: filters?.entityType,
-        assignedTo: filters?.assignedTo
+        ...(filters?.entityType ? { entityType: filters.entityType } : {}),
+        ...(filters?.assignedTo ? { assignedTo: filters.assignedTo } : {})
     };
 
     const scope = filters?.scope;
