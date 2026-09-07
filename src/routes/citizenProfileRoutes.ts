@@ -26,6 +26,7 @@ router.post('/sos', requirePermission(Permission.SOS_CREATE), CitizenProfileCont
 // Documents
 router.get('/documents', requirePermission(Permission.DOCUMENTS_READ_OWN), CitizenProfileController.getDocuments);
 router.post('/documents', requirePermission(Permission.DOCUMENTS_UPLOAD), uploadSingle as any, CitizenProfileController.uploadDocument);
+router.delete('/documents/:id', requirePermission(Permission.DOCUMENTS_UPLOAD), CitizenProfileController.deleteDocument);
 
 // Notifications
 router.patch('/notifications', requirePermission(Permission.NOTIFICATIONS_MANAGE), CitizenProfileController.updateNotifications);

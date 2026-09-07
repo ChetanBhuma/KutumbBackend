@@ -652,7 +652,9 @@ export class CitizenPortalController {
                     fullName: citizenData.fullName,
                     dateOfBirth: new Date(citizenData.dateOfBirth),
                     age: calculateAge(citizenData.dateOfBirth),
-                    gender: citizenData.gender,
+                    gender: (citizenData.gender && ['male', 'female', 'other'].includes(citizenData.gender.trim().toLowerCase()))
+                        ? citizenData.gender.trim().charAt(0).toUpperCase() + citizenData.gender.trim().slice(1).toLowerCase()
+                        : (citizenData.gender || 'Other'),
                     mobileNumber: citizenData.mobileNumber,
                     email: citizenData.email,
                     permanentAddress: citizenData.address, // Mapped from 'address'
