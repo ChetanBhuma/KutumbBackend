@@ -1081,4 +1081,191 @@ export class VisitController {
             next(error);
         }
     }
+
+    /**
+     * Get periodic re-visits due & pending visit requests for SHO workbench
+     */
+    static async getRevisitsDue(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            const query = req.query;
+            let policeStationId = query.policeStationId as string | undefined;
+            let beatId = query.beatId as string | undefined;
+
+            // Apply data scope
+            const scope = req.dataScope;
+            if (scope && scope.level !== 'ALL') {
+                if (scope.level === 'POLICE_STATION' && scope.jurisdictionIds.policeStationId) {
+                    policeStationId = scope.jurisdictionIds.policeStationId;
+                } else if (scope.level === 'BEAT' && scope.jurisdictionIds.beatId) {
+                    beatId = scope.jurisdictionIds.beatId;
+                }
+            }
+
+            const citizenWhere: any = {
+                status: { not: 'DECEASED' }
+            };
+
+            if (policeStationId) citizenWhere.policeStationId = policeStationId;
+            if (beatId) citizenWhere.beatId = beatId;
+
+            // 1. Fetch citizen-initiated visit requests
+            const visitRequestWhere: any = {
+                status: { in: ['Pending', 'In_Progress'] }
+            };
+            if (policeStationId || beatId) {
+                visitRequestWhere.SeniorCitizen = {};
+                if (policeStationId) visitRequestWhere.SeniorCitizen.policeStationId = policeStationId;
+                if (beatId) visitRequestWhere.SeniorCitizen.beatId = beatId;
+            }
+
+            const [visitRequests, citizens] = await Promise.all([
+                prisma.visitRequest.findMany({
+                    where: visitRequestWhere,
+                    include: {
+                        SeniorCitizen: {
+                            select: {
+                                id: true,
+                                fullName: true,
+                                mobileNumber: true,
+                                permanentAddress: true,
+                                vulnerabilityLevel: true,
+                                lastVisitDate: true,
+                                nextScheduledVisitDate: true,
+                                Beat: { select: { id: true, name: true } },
+                                PoliceStation: { select: { id: true, name: true } }
+                            }
+                        }
+                    },
+                    orderBy: { createdAt: 'desc' }
+                }),
+                prisma.seniorCitizen.findMany({
+                    where: citizenWhere,
+                    include: {
+                        Beat: { select: { id: true, name: true } },
+                        PoliceStation: { select: { id: true, name: true } },
+                        Visit: {
+                            where: {
+                                status: { in: ['SCHEDULED', 'IN_PROGRESS'] }
+                            },
+                            orderBy: { scheduledDate: 'desc' },
+                            take: 1
+                        }
+                    },
+                    orderBy: { createdAt: 'desc' }
+                })
+            ]);
+
+            const now = new Date();
+            const intervals: Record<string, number> = {
+                Critical: 15,
+                High: 21,
+                Medium: 45,
+                Low: 90
+            };
+
+            const dueList: any[] = [];
+            const vrCitizenIds = new Set<string>();
+
+            // Process citizen requested visits
+            for (const vr of visitRequests) {
+                if (!vr.SeniorCitizen) continue;
+                vrCitizenIds.add(vr.seniorCitizenId);
+                const daysOverdue = Math.max(0, Math.floor((now.getTime() - new Date(vr.createdAt).getTime()) / (1000 * 60 * 60 * 24)));
+
+                dueList.push({
+                    id: `vr-${vr.id}`,
+                    requestId: vr.id,
+                    seniorCitizenId: vr.SeniorCitizen.id,
+                    citizenName: vr.SeniorCitizen.fullName,
+                    mobileNumber: vr.SeniorCitizen.mobileNumber,
+                    address: vr.SeniorCitizen.permanentAddress,
+                    beatName: vr.SeniorCitizen.Beat?.name || 'Unassigned Beat',
+                    beatId: vr.SeniorCitizen.Beat?.id,
+                    policeStationName: vr.SeniorCitizen.PoliceStation?.name || '',
+                    vulnerabilityLevel: vr.SeniorCitizen.vulnerabilityLevel || 'Medium',
+                    type: 'CITIZEN_REQUEST',
+                    dueReason: `Citizen Requested: ${vr.visitType || 'Follow-up'}`,
+                    requestedDate: vr.preferredDate || vr.createdAt,
+                    preferredTimeSlot: vr.preferredTimeSlot,
+                    notes: vr.notes,
+                    daysOverdue,
+                    status: vr.status,
+                    scheduledVisit: null
+                });
+            }
+
+            // Process periodic re-visits based on vulnerability & time since last visit
+            for (const c of citizens) {
+                if (vrCitizenIds.has(c.id)) continue;
+
+                const risk = c.vulnerabilityLevel || 'Medium';
+                const intervalDays = intervals[risk] || 45;
+                const lastVisit = c.lastVisitDate ? new Date(c.lastVisitDate) : null;
+
+                let isDue = false;
+                let daysOverdue = 0;
+                let reason = '';
+
+                if (!lastVisit) {
+                    const daysSinceCreated = Math.floor((now.getTime() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24));
+                    isDue = true;
+                    daysOverdue = Math.max(0, daysSinceCreated - intervalDays);
+                    reason = `Periodic Re-visit Due (${risk} Risk - Initial Follow-up)`;
+                } else {
+                    const daysSinceLast = Math.floor((now.getTime() - lastVisit.getTime()) / (1000 * 60 * 60 * 24));
+                    if (daysSinceLast >= intervalDays) {
+                        isDue = true;
+                        daysOverdue = daysSinceLast - intervalDays;
+                        reason = `Periodic Re-visit Overdue (${risk} Risk - Last visited ${daysSinceLast}d ago, cycle: ${intervalDays}d)`;
+                    } else if (c.nextScheduledVisitDate && new Date(c.nextScheduledVisitDate) <= now) {
+                        isDue = true;
+                        daysOverdue = Math.max(1, Math.floor((now.getTime() - new Date(c.nextScheduledVisitDate).getTime()) / (1000 * 60 * 60 * 24)));
+                        reason = `Scheduled Target Follow-up Date Passed`;
+                    }
+                }
+
+                if (isDue) {
+                    dueList.push({
+                        id: `periodic-${c.id}`,
+                        seniorCitizenId: c.id,
+                        citizenName: c.fullName,
+                        mobileNumber: c.mobileNumber,
+                        address: c.permanentAddress,
+                        beatName: c.Beat?.name || 'Unassigned Beat',
+                        beatId: c.Beat?.id,
+                        policeStationName: c.PoliceStation?.name || '',
+                        vulnerabilityLevel: risk,
+                        type: 'PERIODIC_REVISIT',
+                        dueReason: reason,
+                        lastVisitDate: c.lastVisitDate,
+                        nextScheduledVisitDate: c.nextScheduledVisitDate,
+                        daysOverdue,
+                        status: 'Pending',
+                        scheduledVisit: c.Visit?.[0] ? {
+                            id: c.Visit[0].id,
+                            scheduledDate: c.Visit[0].scheduledDate,
+                            status: c.Visit[0].status
+                        } : null
+                    });
+                }
+            }
+
+            // Sort: highest overdue days first, then highest risk first
+            const riskWeight: Record<string, number> = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+            dueList.sort((a, b) => {
+                const riskDiff = (riskWeight[b.vulnerabilityLevel] || 0) - (riskWeight[a.vulnerabilityLevel] || 0);
+                if (riskDiff !== 0) return riskDiff;
+                return b.daysOverdue - a.daysOverdue;
+            });
+
+            res.json({
+                success: true,
+                data: dueList,
+                total: dueList.length
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
 }
+

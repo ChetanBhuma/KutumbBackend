@@ -113,6 +113,8 @@ router.get(
         query('rangeId').optional().trim(),
         query('vulnerabilityLevel').optional().isIn(['Low', 'Medium', 'High']),
         query('verificationStatus').optional().isIn(['Pending', 'Verified', 'Rejected', 'FieldVerified', 'Suspended']),
+        query('sortBy').optional().trim(),
+        query('sortOrder').optional().isIn(['asc', 'desc']),
         validate
     ],
     asyncHandler(CitizenController.list)

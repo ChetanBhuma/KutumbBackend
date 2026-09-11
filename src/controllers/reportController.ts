@@ -40,14 +40,14 @@ export class ReportController {
             if (policeStationId) {
                 citizenWhere.policeStationId = String(policeStationId);
                 visitWhere.policeStationId = String(policeStationId);
-                sosWhere.seniorCitizen = { policeStationId: String(policeStationId) };
+                sosWhere.SeniorCitizen = { policeStationId: String(policeStationId) };
                 officerWhere.policeStationId = String(policeStationId);
             }
 
             if (beatId) {
                 citizenWhere.beatId = String(beatId);
                 visitWhere.beatId = String(beatId);
-                sosWhere.seniorCitizen = { beatId: String(beatId) };
+                sosWhere.SeniorCitizen = { beatId: String(beatId) };
                 officerWhere.beatId = String(beatId);
             }
 
@@ -64,34 +64,57 @@ export class ReportController {
                 }
             }
 
-            const verificationWhere: any = { status: 'PENDING' };
-            const visitRequestWhere: any = { status: 'Pending' };
+            const verificationWhere: any = { status: { in: ['PENDING', 'IN_PROGRESS'] } };
+            const visitRequestWhere: any = { status: { in: ['Pending', 'In_Progress'] } };
+            const serviceRequestWhere: any = { status: { in: ['Pending', 'In_Progress'] } };
+            const beatWhere: any = { isActive: true };
 
             if (citizenWhere.policeStationId) {
                 verificationWhere.seniorCitizen = { policeStationId: citizenWhere.policeStationId };
                 visitRequestWhere.SeniorCitizen = { policeStationId: citizenWhere.policeStationId };
+                serviceRequestWhere.SeniorCitizen = { policeStationId: citizenWhere.policeStationId };
+                beatWhere.policeStationId = citizenWhere.policeStationId;
             } else if (citizenWhere.districtId) {
                 verificationWhere.seniorCitizen = { districtId: citizenWhere.districtId };
                 visitRequestWhere.SeniorCitizen = { districtId: citizenWhere.districtId };
+                serviceRequestWhere.SeniorCitizen = { districtId: citizenWhere.districtId };
+                beatWhere.districtId = citizenWhere.districtId;
             } else if (citizenWhere.rangeId) {
                 verificationWhere.seniorCitizen = { rangeId: citizenWhere.rangeId };
                 visitRequestWhere.SeniorCitizen = { rangeId: citizenWhere.rangeId };
+                serviceRequestWhere.SeniorCitizen = { rangeId: citizenWhere.rangeId };
+                beatWhere.rangeId = citizenWhere.rangeId;
             }
+
+            // Today's date range for daily operational metrics
+            const todayStart = new Date();
+            todayStart.setHours(0, 0, 0, 0);
+            const todayEnd = new Date();
+            todayEnd.setHours(23, 59, 59, 999);
 
             const [
                 totalCitizens,
                 verifiedCitizens,
                 pendingCitizens,
                 highVulnerability,
+                criticalVulnerability,
+                overdueHighRiskVisits,
                 totalOfficers,
                 activeOfficersList,
+                stationBeats,
                 totalVisits,
                 scheduledVisits,
                 inProgressVisits,
                 completedVisits,
                 cancelledVisits,
+                todayScheduledVisits,
+                todayCompletedVisits,
                 pendingVerificationRequests,
+                pendingCitizenVerifications,
+                pendingStaffVerifications,
                 pendingVisitRequests,
+                pendingRevisitRequests,
+                pendingServiceRequests,
                 totalSOS,
                 activeSOS,
                 resolvedSOS,
@@ -101,6 +124,14 @@ export class ReportController {
                 prisma.seniorCitizen.count({ where: { ...citizenWhere, idVerificationStatus: 'Verified' } }),
                 prisma.seniorCitizen.count({ where: { ...citizenWhere, idVerificationStatus: 'Pending' } }),
                 prisma.seniorCitizen.count({ where: { ...citizenWhere, vulnerabilityLevel: 'High' } }),
+                prisma.seniorCitizen.count({ where: { ...citizenWhere, vulnerabilityLevel: 'Critical' } }),
+                prisma.seniorCitizen.count({
+                    where: {
+                        ...citizenWhere,
+                        vulnerabilityLevel: { in: ['High', 'Critical'] },
+                        nextScheduledVisitDate: { lt: new Date() }
+                    }
+                }),
                 prisma.beatOfficer.count({ where: officerWhere }),
                 prisma.beatOfficer.findMany({
                     where: { ...officerWhere, isActive: true },
@@ -112,13 +143,40 @@ export class ReportController {
                         }
                     }
                 }),
+                prisma.beat.findMany({
+                    where: beatWhere,
+                    select: {
+                        id: true,
+                        name: true,
+                        code: true,
+                        _count: { select: { BeatOfficer: true } }
+                    }
+                }),
                 prisma.visit.count({ where: visitWhere }),
                 prisma.visit.count({ where: { ...visitWhere, status: 'SCHEDULED' } }),
                 prisma.visit.count({ where: { ...visitWhere, status: 'IN_PROGRESS' } }),
                 prisma.visit.count({ where: { ...visitWhere, status: 'COMPLETED' } }),
                 prisma.visit.count({ where: { ...visitWhere, status: 'CANCELLED' } }),
+                prisma.visit.count({
+                    where: {
+                        ...visitWhere,
+                        scheduledDate: { gte: todayStart, lte: todayEnd },
+                        status: { in: ['SCHEDULED', 'IN_PROGRESS', 'COMPLETED'] }
+                    }
+                }),
+                prisma.visit.count({
+                    where: {
+                        ...visitWhere,
+                        completedDate: { gte: todayStart, lte: todayEnd },
+                        status: 'COMPLETED'
+                    }
+                }),
                 prisma.verificationRequest.count({ where: verificationWhere }),
+                prisma.verificationRequest.count({ where: { ...verificationWhere, entityType: 'SeniorCitizen' } }),
+                prisma.verificationRequest.count({ where: { ...verificationWhere, entityType: { not: 'SeniorCitizen' } } }),
                 prisma.visitRequest.count({ where: visitRequestWhere }),
+                prisma.visitRequest.count({ where: { ...visitRequestWhere, visitType: 'Follow-up' } }),
+                prisma.serviceRequest.count({ where: serviceRequestWhere }),
                 prisma.sOSAlert.count({ where: sosWhere }),
                 prisma.sOSAlert.count({ where: { ...sosWhere, status: 'Active' } }),
                 prisma.sOSAlert.count({ where: { ...sosWhere, status: 'Resolved' } }),
@@ -141,6 +199,10 @@ export class ReportController {
             const assignedOfficers = activeOfficersList.filter(o => o.beatId !== null && (!officerWhere.policeStationId || !o.Beat || o.Beat.policeStationId === officerWhere.policeStationId)).length;
             const unassignedOfficers = Math.max(0, activeOfficers - assignedOfficers);
 
+            const totalBeats = stationBeats.length;
+            const mannedBeats = stationBeats.filter(b => b._count.BeatOfficer > 0).length;
+            const unassignedBeatsCount = Math.max(0, totalBeats - mannedBeats);
+
             res.json({
                 success: true,
                 data: {
@@ -148,13 +210,21 @@ export class ReportController {
                         total: totalCitizens,
                         verified: verifiedCitizens,
                         pending: pendingCitizens,
-                        highVulnerability
+                        highVulnerability: highVulnerability + criticalVulnerability,
+                        criticalVulnerability,
+                        overdueHighRiskVisits
                     },
                     officers: {
                         total: totalOfficers,
                         active: activeOfficers,
                         assigned: assignedOfficers,
                         unassigned: unassignedOfficers
+                    },
+                    beats: {
+                        total: totalBeats,
+                        manned: mannedBeats,
+                        unassigned: unassignedBeatsCount,
+                        coverageRate: totalBeats > 0 ? ((mannedBeats / totalBeats) * 100).toFixed(1) : 0
                     },
                     visits: {
                         total: totalVisits,
@@ -163,12 +233,19 @@ export class ReportController {
                         scheduled: scheduledVisits,
                         inProgress: inProgressVisits,
                         cancelled: cancelledVisits,
+                        todayScheduled: todayScheduledVisits,
+                        todayCompleted: todayCompletedVisits,
+                        revisitsDue: pendingVisitRequests + overdueHighRiskVisits,
                         completionRate: totalVisits > 0 ? ((completedVisits / totalVisits) * 100).toFixed(2) : 0
                     },
                     pendingQueues: {
                         verificationRequests: pendingVerificationRequests,
+                        citizenVerifications: pendingCitizenVerifications,
+                        staffVerifications: pendingStaffVerifications,
                         visitRequests: pendingVisitRequests,
-                        totalPendingAction: pendingVerificationRequests + pendingVisitRequests
+                        revisitRequests: pendingVisitRequests + overdueHighRiskVisits,
+                        serviceRequests: pendingServiceRequests,
+                        totalPendingAction: pendingVerificationRequests + pendingVisitRequests + pendingServiceRequests
                     },
                     sos: {
                         total: totalSOS,

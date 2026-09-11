@@ -530,6 +530,7 @@ export class CitizenPortalController {
                     citizen: {
                         include: {
                             PoliceStation: { select: { id: true, name: true, code: true } },
+                            District: { select: { id: true, name: true, code: true } },
                             Beat: { select: { id: true, name: true, code: true } },
                             SpouseDetails: true,
                             FamilyMember: true,

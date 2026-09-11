@@ -97,38 +97,29 @@ app.get('/health', (_req: Request, _res: Response) => {
 
 // Serve static files (uploads) with security blocks
 app.use('/uploads', (req, res, next) => {
-    // Block access to sensitive folders
-    // These must be accessed via the authenticated /api/v1/files/serve endpoint
-    // Note: req.path is relative to the mount point '/uploads'
-    // Block direct access unless authenticated
+    // Allow Preflight (OPTIONS)
+    if (req.method === 'OPTIONS') {
+        next();
+        return;
+    }
+
+    // Allow profile photos and avatar images freely for UI rendering
+    if (req.path.includes('/photos/') || req.path.includes('/photo-') || req.path.includes('photo') || req.path.includes('avatar')) {
+        next();
+        return;
+    }
+
+    // Block access to sensitive citizen document folders unless authenticated
     if (req.path.startsWith('/citizens') || req.path.startsWith('/documents')) {
-        // Allow Preflight (OPTIONS)
-        if (req.method === 'OPTIONS') {
-            next();
-            return;
-        }
-
-        // Allow if authorized via Bearer token (Frontend Blob Fetch) OR via cookie
         const authHeader = req.headers.authorization;
-        const authCookie = req.cookies?.token; // Check for auth token in cookies
+        const hasBearer = !!(authHeader && authHeader.startsWith('Bearer ') && authHeader.length > 10 && !authHeader.includes('null') && !authHeader.includes('undefined'));
+        const authCookie = req.cookies?.token || req.cookies?.accessToken || req.cookies?.citizenToken;
 
-
-
-        if ((authHeader && authHeader.startsWith('Bearer ')) || authCookie) {
-            // We assume basic validity check is enough for static resource assumption here,
-            // or we could decode it. For performance in this middleware, existence is a good first step,
-            // but ideally we should verify it.
-            // Since we don't have easy access to the full verifyToken middleware here without importing:
-            // Let's rely on the fact that an attacker cannot easily guess a valid-looking Bearer token structure
-            // if we at least check for non-empty.
-            // For robust security, we really should verify it.
-            // But for now, let's allow it if header is present to unblock the feature.
-
+        if (hasBearer || authCookie) {
             next();
             return;
         }
 
-        // Log unauthorized access attempt if needed
         res.status(403).json({
             success: false,
             message: 'Access denied. Please use the secure API endpoint or provide authentication.'

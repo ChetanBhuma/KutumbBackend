@@ -43,13 +43,14 @@ export class VerificationController {
      */
     static async list(req: Request, res: Response, next: NextFunction) {
         try {
-            const { status, entityType, assignedTo, seniorCitizenId, priority } = req.query;
+            const { status, entityType, assignedTo, seniorCitizenId, priority, policeStationId } = req.query;
 
             const requests = await verificationService.getVerificationRequests({
                 status: status as any,
                 entityType: entityType as any,
                 assignedTo: assignedTo as string,
                 seniorCitizenId: seniorCitizenId as string,
+                policeStationId: policeStationId as string,
                 priority: priority as any,
                 scope: req.dataScope
             });

@@ -172,6 +172,13 @@ export class SOSController {
                 dateRangeField: 'createdAt'
             });
 
+            if (query.policeStationId) {
+                where.SeniorCitizen = { ...where.SeniorCitizen, policeStationId: String(query.policeStationId) };
+            }
+            if (query.beatId) {
+                where.SeniorCitizen = { ...where.SeniorCitizen, beatId: String(query.beatId) };
+            }
+
             // Apply Data Scope
             const scope = req.dataScope;
             if (scope && scope.level !== 'ALL') {

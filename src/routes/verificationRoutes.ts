@@ -48,6 +48,7 @@ router.get(
         query('entityType').optional().isIn(['HouseholdHelp', 'EmergencyContact', 'Tenant', 'SeniorCitizen', 'Other']),
         query('assignedTo').optional().trim(),
         query('seniorCitizenId').optional().trim(),
+        query('policeStationId').optional().trim(),
         query('priority').optional().isIn(['Low', 'Normal', 'High', 'Urgent']),
         validate
     ],

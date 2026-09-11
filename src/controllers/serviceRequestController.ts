@@ -3,24 +3,21 @@ import { prisma } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/authenticate';
 
-const db = prisma as any;
-
 export class ServiceRequestController {
     /**
      * Create a new service request
      */
     static async create(req: Request, res: Response, next: NextFunction) {
         try {
-            const { seniorCitizenId, requestType, description, priority } = req.body;
+            const { seniorCitizenId, serviceType, requestType, description, priority } = req.body;
 
-            const serviceRequest = await db.serviceRequest.create({
+            const serviceRequest = await prisma.serviceRequest.create({
                 data: {
                     seniorCitizenId,
-                    requestType, // 'HEALTH', 'EMERGENCY', 'WELFARE', 'DOCUMENT', 'OTHER'
+                    serviceType: serviceType || requestType || 'General',
                     description,
-                    priority: priority || 'Medium',
-                    status: 'Pending',
-                    requestedAt: new Date()
+                    priority: priority || 'Normal',
+                    status: 'Pending'
                 },
                 include: {
                     SeniorCitizen: {
@@ -44,18 +41,23 @@ export class ServiceRequestController {
      */
     static async list(req: Request, res: Response, next: NextFunction) {
         try {
-            const { status, requestType, priority, seniorCitizenId, page = 1, limit = 50 } = req.query;
+            const { status, serviceType, requestType, priority, seniorCitizenId, policeStationId, page = 1, limit = 50 } = req.query;
 
             const where: any = {};
-            if (status) where.status = status;
-            if (requestType) where.requestType = requestType;
+            if (status) {
+                // Normalize status if passed with space
+                const normalizedStatus = String(status).replace(' ', '_');
+                where.status = normalizedStatus;
+            }
+            if (serviceType || requestType) {
+                where.serviceType = serviceType || requestType;
+            }
             if (priority) where.priority = priority;
-            if (seniorCitizenId) where.seniorCitizenId = seniorCitizenId;
+            if (seniorCitizenId) where.seniorCitizenId = String(seniorCitizenId);
 
-            // Apply Data Scope
+            // Apply Data Scope & Police Station filter
             const scope = req.dataScope;
             if (scope && scope.level !== 'ALL') {
-                // Ensure SeniorCitizen relation object exists if not present (not needed if filtering root fields, but here we filter relation)
                 where.SeniorCitizen = where.SeniorCitizen || {};
 
                 if (scope.level === 'RANGE' && scope.jurisdictionIds.rangeId) {
@@ -71,29 +73,39 @@ export class ServiceRequestController {
                 }
             }
 
+            if (policeStationId) {
+                where.SeniorCitizen = {
+                    ...(where.SeniorCitizen || {}),
+                    policeStationId: String(policeStationId)
+                };
+            }
+
             const skip = (Number(page) - 1) * Number(limit);
 
             const [requests, total] = await Promise.all([
-                db.serviceRequest.findMany({
+                prisma.serviceRequest.findMany({
                     where,
                     include: {
                         SeniorCitizen: {
                             select: {
+                                id: true,
                                 fullName: true,
                                 mobileNumber: true,
                                 permanentAddress: true,
-                                vulnerabilityLevel: true
+                                vulnerabilityLevel: true,
+                                policeStationId: true,
+                                beatId: true
                             }
                         }
                     },
                     orderBy: [
                         { priority: 'desc' },
-                        { requestedAt: 'desc' }
+                        { createdAt: 'desc' }
                     ],
                     skip,
                     take: Number(limit)
                 }),
-                db.serviceRequest.count({ where })
+                prisma.serviceRequest.count({ where })
             ]);
 
             res.json({
@@ -120,7 +132,7 @@ export class ServiceRequestController {
         try {
             const { id } = req.params;
 
-            const serviceRequest = await db.serviceRequest.findUnique({
+            const serviceRequest = await prisma.serviceRequest.findUnique({
                 where: { id },
                 include: {
                     SeniorCitizen: {
@@ -155,20 +167,20 @@ export class ServiceRequestController {
     static async updateStatus(req: AuthRequest, res: Response, next: NextFunction) {
         try {
             const { id } = req.params;
-            const { status, assignedTo, notes, resolution } = req.body;
+            const { status, assignedTo, resolution } = req.body;
 
             const updateData: any = {};
-            if (status) updateData.status = status;
+            if (status) {
+                const normalizedStatus = String(status).replace(' ', '_');
+                updateData.status = normalizedStatus;
+                if (normalizedStatus === 'Resolved' || normalizedStatus === 'Closed') {
+                    updateData.completedAt = new Date();
+                }
+            }
             if (assignedTo) updateData.assignedTo = assignedTo;
-            if (notes) updateData.notes = notes;
             if (resolution) updateData.resolution = resolution;
 
-            if (status === 'Completed') {
-                updateData.completedAt = new Date();
-                updateData.completedBy = req.user?.id;
-            }
-
-            const serviceRequest = await db.serviceRequest.update({
+            const serviceRequest = await prisma.serviceRequest.update({
                 where: { id },
                 data: updateData,
                 include: {
@@ -194,14 +206,13 @@ export class ServiceRequestController {
     static async assign(req: AuthRequest, res: Response, next: NextFunction) {
         try {
             const { id } = req.params;
-            const { officerId } = req.body;
+            const { officerId, assignedTo } = req.body;
 
-            const serviceRequest = await db.serviceRequest.update({
+            const serviceRequest = await prisma.serviceRequest.update({
                 where: { id },
                 data: {
-                    assignedTo: officerId,
-                    status: 'In Progress',
-                    assignedAt: new Date()
+                    assignedTo: officerId || assignedTo,
+                    status: 'In_Progress'
                 }
             });
 
@@ -224,25 +235,25 @@ export class ServiceRequestController {
 
             const where: any = {};
             if (startDate || endDate) {
-                where.requestedAt = {};
-                if (startDate) where.requestedAt.gte = new Date(String(startDate));
-                if (endDate) where.requestedAt.lte = new Date(String(endDate));
+                where.createdAt = {};
+                if (startDate) where.createdAt.gte = new Date(String(startDate));
+                if (endDate) where.createdAt.lte = new Date(String(endDate));
             }
 
-            const [total, pending, inProgress, completed] = await Promise.all([
-                db.serviceRequest.count({ where }),
-                db.serviceRequest.count({ where: { ...where, status: 'Pending' } }),
-                db.serviceRequest.count({ where: { ...where, status: 'In Progress' } }),
-                db.serviceRequest.count({ where: { ...where, status: 'Completed' } })
+            const [total, pending, inProgress, resolved] = await Promise.all([
+                prisma.serviceRequest.count({ where }),
+                prisma.serviceRequest.count({ where: { ...where, status: 'Pending' } }),
+                prisma.serviceRequest.count({ where: { ...where, status: 'In_Progress' } }),
+                prisma.serviceRequest.count({ where: { ...where, status: 'Resolved' } })
             ]);
 
-            const byType = await db.serviceRequest.groupBy({
-                by: ['requestType'],
+            const byType = await prisma.serviceRequest.groupBy({
+                by: ['serviceType'],
                 where,
                 _count: true
             });
 
-            const byPriority = await db.serviceRequest.groupBy({
+            const byPriority = await prisma.serviceRequest.groupBy({
                 by: ['priority'],
                 where,
                 _count: true
@@ -252,9 +263,9 @@ export class ServiceRequestController {
                 success: true,
                 data: {
                     total,
-                    byStatus: { pending, inProgress, completed },
+                    byStatus: { pending, inProgress, resolved },
                     byType: byType.reduce((acc: any, item: any) => {
-                        acc[item.requestType] = item._count;
+                        acc[item.serviceType] = item._count;
                         return acc;
                     }, {}),
                     byPriority: byPriority.reduce((acc: any, item: any) => {
@@ -275,7 +286,7 @@ export class ServiceRequestController {
         try {
             const { id } = req.params;
 
-            await db.serviceRequest.delete({
+            await prisma.serviceRequest.delete({
                 where: { id }
             });
 
@@ -288,3 +299,4 @@ export class ServiceRequestController {
         }
     }
 }
+

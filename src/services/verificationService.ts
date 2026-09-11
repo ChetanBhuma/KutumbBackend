@@ -264,67 +264,85 @@ export const getVerificationRequests = async (filters: {
     entityType?: VerificationEntityType;
     assignedTo?: string;
     seniorCitizenId?: string;
+    policeStationId?: string;
     priority?: VerificationPriority;
     scope?: import('../middleware/dataScopeMiddleware').DataScope;
 }) => {
+    const rawStatus = filters.status ? String(filters.status).toUpperCase() : undefined;
     const normalizedStatus = normalizeVerificationStatus(filters.status);
 
-    // Auto-heal / backfill: If fetching pending verifications, ensure every unverified citizen has a VerificationRequest
-    if (normalizedStatus === 'PENDING' || !filters.status) {
-        try {
-            const unverifiedCitizens = await prisma.seniorCitizen.findMany({
-                where: {
-                    idVerificationStatus: 'Pending',
-                    VerificationRequest: { none: {} }
-                },
-                select: {
-                    id: true,
-                    fullName: true,
-                    policeStationId: true
+    // Auto-heal / backfill: Ensure every citizen with idVerificationStatus='Pending' has an active VerificationRequest
+    try {
+        const unverifiedCitizens = await prisma.seniorCitizen.findMany({
+            where: {
+                idVerificationStatus: 'Pending',
+                VerificationRequest: {
+                    none: {
+                        status: { in: ['PENDING', 'IN_PROGRESS'] }
+                    }
                 }
-            });
-
-            if (unverifiedCitizens.length > 0) {
-                for (const citizen of unverifiedCitizens) {
-                    await prisma.verificationRequest.create({
-                        data: {
-                            entityType: 'SeniorCitizen',
-                            entityId: citizen.id,
-                            seniorCitizenId: citizen.id,
-                            requestedBy: 'System',
-                            priority: 'Normal',
-                            status: 'PENDING',
-                            remarks: 'Citizen registration verification - Awaiting SHO officer assignment'
-                        }
-                    }).catch(err => console.error('Failed to auto-create verification request for citizen', citizen.id, err));
-                }
+            },
+            select: {
+                id: true,
+                fullName: true,
+                policeStationId: true
             }
-        } catch (e) {
-            console.error('Error auto-syncing unverified citizens to VerificationRequests:', e);
+        });
+
+        if (unverifiedCitizens.length > 0) {
+            for (const citizen of unverifiedCitizens) {
+                await prisma.verificationRequest.create({
+                    data: {
+                        entityType: 'SeniorCitizen',
+                        entityId: citizen.id,
+                        seniorCitizenId: citizen.id,
+                        requestedBy: 'System',
+                        priority: 'Normal',
+                        status: 'PENDING',
+                        remarks: 'Citizen registration verification - Awaiting SHO officer assignment'
+                    }
+                }).catch(err => console.error('Failed to auto-create verification request for citizen', citizen.id, err));
+            }
         }
+    } catch (e) {
+        console.error('Error auto-syncing unverified citizens to VerificationRequests:', e);
     }
 
     const where: any = {
-        ...(normalizedStatus ? { status: normalizedStatus } : {}),
         ...(filters.entityType ? { entityType: filters.entityType } : {}),
         ...(filters.assignedTo ? { assignedTo: filters.assignedTo } : {}),
         ...(filters.seniorCitizenId ? { seniorCitizenId: filters.seniorCitizenId } : {}),
         ...(filters.priority ? { priority: filters.priority } : {})
     };
 
+    // If querying 'Pending' or 'PENDING', return both PENDING and IN_PROGRESS requests (the active workbench queue)
+    if (rawStatus === 'PENDING' || rawStatus === 'PENDING_ALL') {
+        where.status = { in: ['PENDING', 'IN_PROGRESS'] };
+    } else if (normalizedStatus) {
+        where.status = normalizedStatus;
+    }
+
     const scope = filters.scope;
     if (scope && scope.level !== 'ALL') {
+        where.seniorCitizen = where.seniorCitizen || {};
         if (scope.level === 'RANGE' && scope.jurisdictionIds.rangeId) {
-            where.seniorCitizen = { rangeId: scope.jurisdictionIds.rangeId };
+            where.seniorCitizen.rangeId = scope.jurisdictionIds.rangeId;
         } else if (scope.level === 'DISTRICT' && scope.jurisdictionIds.districtId) {
-            where.seniorCitizen = { districtId: scope.jurisdictionIds.districtId };
+            where.seniorCitizen.districtId = scope.jurisdictionIds.districtId;
         } else if (scope.level === 'SUBDIVISION' && scope.jurisdictionIds.subDivisionId) {
-            where.seniorCitizen = { subDivisionId: scope.jurisdictionIds.subDivisionId };
+            where.seniorCitizen.subDivisionId = scope.jurisdictionIds.subDivisionId;
         } else if (scope.level === 'POLICE_STATION' && scope.jurisdictionIds.policeStationId) {
-            where.seniorCitizen = { policeStationId: scope.jurisdictionIds.policeStationId };
+            where.seniorCitizen.policeStationId = scope.jurisdictionIds.policeStationId;
         } else if (scope.level === 'BEAT' && scope.jurisdictionIds.beatId) {
-            where.seniorCitizen = { beatId: scope.jurisdictionIds.beatId };
+            where.seniorCitizen.beatId = scope.jurisdictionIds.beatId;
         }
+    }
+
+    if (filters.policeStationId) {
+        where.seniorCitizen = {
+            ...(where.seniorCitizen || {}),
+            policeStationId: String(filters.policeStationId)
+        };
     }
 
     return await prisma.verificationRequest.findMany({
@@ -336,6 +354,8 @@ export const getVerificationRequests = async (filters: {
                     fullName: true,
                     mobileNumber: true,
                     permanentAddress: true,
+                    idVerificationStatus: true,
+                    vulnerabilityLevel: true,
                     policeStationId: true,
                     PoliceStation: {
                         select: { name: true }
@@ -348,7 +368,7 @@ export const getVerificationRequests = async (filters: {
         },
         orderBy: [
             { priority: 'desc' },
-            { createdAt: 'asc' }
+            { createdAt: 'desc' }
         ]
     });
 };

@@ -163,6 +163,25 @@ router.get(
 
 /**
  * @swagger
+ * /visits/revisits-due:
+ *   get:
+ *     tags: [Visits]
+ *     summary: Get periodic re-visits due and pending visit requests for SHO workbench
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of senior citizens due for re-visits
+ */
+router.get(
+    '/revisits-due',
+    requirePermission(Permission.VISITS_READ),
+    asyncHandler(VisitController.getRevisitsDue)
+);
+
+
+/**
+ * @swagger
  * /visits/{id}:
  *   get:
  *     tags: [Visits]
