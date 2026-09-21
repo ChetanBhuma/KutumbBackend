@@ -98,7 +98,12 @@ export class OfficerAuthController {
             // Find officer and linked user
             const officer = await prisma.beatOfficer.findUnique({
                 where: { badgeNumber },
-                include: { user: true }
+                include: {
+                    user: true,
+                    PoliceStation: { select: { id: true, name: true } },
+                    Beat: { select: { id: true, name: true } },
+                    District: { select: { id: true, name: true } }
+                }
             });
 
             if (!officer) {
@@ -164,6 +169,21 @@ export class OfficerAuthController {
 
             const permissions = permissionCodes?.permissions.map(p => p.code) || [];
 
+            const officerProfileData = {
+                id: officer.id,
+                name: officer.name,
+                badgeNumber: officer.badgeNumber,
+                rank: officer.rank,
+                mobileNumber: officer.mobileNumber,
+                email: officer.email,
+                policeStationId: officer.policeStationId,
+                beatId: officer.beatId,
+                districtId: officer.districtId,
+                PoliceStation: officer.PoliceStation,
+                Beat: officer.Beat,
+                District: officer.District
+            };
+
             res.json({
                 success: true,
                 data: {
@@ -172,14 +192,13 @@ export class OfficerAuthController {
                         email: user.email,
                         role: resolvedRole,
                         permissions, // Send permissions to frontend
-                        officerProfile: {
-                            id: officer.id,
-                            name: officer.name,
-                            badgeNumber: officer.badgeNumber,
-                            rank: officer.rank
-                        }
+                        officerProfile: officerProfileData
                     },
-                    tokens
+                    tokens,
+                    accessToken: tokens.accessToken,
+                    refreshToken: tokens.refreshToken,
+                    officer: officerProfileData,
+                    officerProfile: officerProfileData
                 },
                 message: 'Login successful'
             });

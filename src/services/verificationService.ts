@@ -304,6 +304,21 @@ export const getVerificationRequests = async (filters: {
                 }).catch(err => console.error('Failed to auto-create verification request for citizen', citizen.id, err));
             }
         }
+
+        // Auto-heal priority for unassessed citizens (requests created before assessment should be Normal, not High)
+        await prisma.verificationRequest.updateMany({
+            where: {
+                entityType: 'SeniorCitizen',
+                priority: 'High',
+                seniorCitizen: {
+                    lastAssessmentDate: null,
+                    vulnerabilityScore: null
+                }
+            },
+            data: {
+                priority: 'Normal'
+            }
+        }).catch(err => console.error('Failed to normalize priority for unassessed citizens:', err));
     } catch (e) {
         console.error('Error auto-syncing unverified citizens to VerificationRequests:', e);
     }
@@ -356,6 +371,8 @@ export const getVerificationRequests = async (filters: {
                     permanentAddress: true,
                     idVerificationStatus: true,
                     vulnerabilityLevel: true,
+                    vulnerabilityScore: true,
+                    lastAssessmentDate: true,
                     policeStationId: true,
                     PoliceStation: {
                         select: { name: true }
@@ -366,10 +383,9 @@ export const getVerificationRequests = async (filters: {
                 }
             }
         },
-        orderBy: [
-            { priority: 'desc' },
-            { createdAt: 'desc' }
-        ]
+        orderBy: {
+            createdAt: 'desc'
+        }
     });
 };
 

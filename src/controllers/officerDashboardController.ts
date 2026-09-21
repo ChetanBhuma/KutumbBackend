@@ -172,15 +172,28 @@ export class OfficerDashboardController {
 
             if (!officer) throw new AppError('Officer profile not found', 404);
 
-            const scopeFilter = OfficerDashboardController.getScopeFilter(officer);
+            const orConditions: any[] = [];
+            if (officer.beatId) {
+                orConditions.push({ beatId: officer.beatId });
+            }
+            if (officer.policeStationId) {
+                orConditions.push({ policeStationId: officer.policeStationId });
+            }
+            orConditions.push({
+                Visit: {
+                    some: {
+                        officerId: officer.id
+                    }
+                }
+            });
 
-            // Get all citizens in the officer's beat with GPS coordinates
+            // Get all citizens in the officer's jurisdiction with GPS coordinates
             const citizens = await prisma.seniorCitizen.findMany({
                 where: {
-                    ...scopeFilter,
                     isActive: true,
                     gpsLatitude: { not: null },
-                    gpsLongitude: { not: null }
+                    gpsLongitude: { not: null },
+                    ...(orConditions.length > 0 ? { OR: orConditions } : {})
                 },
                 select: {
                     id: true,
@@ -214,8 +227,9 @@ export class OfficerDashboardController {
             const officer = await prisma.beatOfficer.findFirst({
                 where: { user: { id: req.user.id } },
                 include: {
-                    PoliceStation: { select: { name: true } },
-                    Beat: { select: { name: true } }
+                    PoliceStation: { select: { id: true, name: true } },
+                    Beat: { select: { id: true, name: true } },
+                    District: { select: { id: true, name: true } }
                 }
             });
 
@@ -223,7 +237,10 @@ export class OfficerDashboardController {
 
             res.json({
                 success: true,
-                data: { officer }
+                data: {
+                    officer,
+                    officerProfile: officer
+                }
             });
 
         } catch (error) {

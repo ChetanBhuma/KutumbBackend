@@ -103,8 +103,19 @@ app.use('/uploads', (req, res, next) => {
         return;
     }
 
-    // Allow profile photos and avatar images freely for UI rendering
-    if (req.path.includes('/photos/') || req.path.includes('/photo-') || req.path.includes('photo') || req.path.includes('avatar')) {
+    // Allow profile photos, avatar images, and static image assets freely for UI rendering
+    const lowerPath = req.path.toLowerCase();
+    if (
+        lowerPath.includes('/photos/') ||
+        lowerPath.includes('/photo-') ||
+        lowerPath.includes('photo') ||
+        lowerPath.includes('avatar') ||
+        lowerPath.includes('profile') ||
+        lowerPath.endsWith('.jpg') ||
+        lowerPath.endsWith('.jpeg') ||
+        lowerPath.endsWith('.png') ||
+        lowerPath.endsWith('.webp')
+    ) {
         next();
         return;
     }

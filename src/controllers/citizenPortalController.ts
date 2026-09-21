@@ -785,7 +785,7 @@ export class CitizenPortalController {
                 entityId: citizen.id,
                 seniorCitizenId: citizen.id,
                 requestedBy: citizen.id,
-                priority: 'High',
+                priority: 'Normal',
                 remarks: 'Initial Registration Verification',
                 documents: []
             });
@@ -1247,8 +1247,71 @@ export class CitizenPortalController {
                 orderBy: { scheduledDate: 'desc' }
             });
 
-            // Include Pending Visit Requests on the first page
+            // Include Pending Verification Requests & Pending Visit Requests on the first page
             if (page === 1) {
+                // 1. Fetch Verification Requests for this senior citizen (initial registration verification)
+                const pendingVerifications = await db.verificationRequest.findMany({
+                    where: {
+                        seniorCitizenId: user.citizenId,
+                        entityType: 'SeniorCitizen',
+                        status: { in: ['PENDING', 'IN_PROGRESS'] }
+                    },
+                    include: {
+                        seniorCitizen: {
+                            select: {
+                                PoliceStation: {
+                                    select: { id: true, name: true }
+                                }
+                            }
+                        }
+                    },
+                    orderBy: { createdAt: 'desc' }
+                });
+
+                // Check if any active/pending visit already exists with visitType 'Verification'
+                const hasActiveVerificationVisit = result.items.some((v: any) =>
+                    v.visitType?.toLowerCase()?.includes('verification') &&
+                    ['scheduled', 'in_progress', 'in progress', 'pending'].includes(v.status?.toLowerCase())
+                );
+
+                if (pendingVerifications.length > 0 && !hasActiveVerificationVisit) {
+                    const mappedVerifications = await Promise.all(
+                        pendingVerifications.map(async (vr: any) => {
+                            let officer = null;
+                            if (vr.assignedTo) {
+                                officer = await db.beatOfficer.findUnique({
+                                    where: { id: vr.assignedTo },
+                                    select: {
+                                        id: true,
+                                        name: true,
+                                        rank: true,
+                                        badgeNumber: true,
+                                        mobileNumber: true
+                                    }
+                                });
+                            }
+
+                            return {
+                                id: vr.id,
+                                seniorCitizenId: vr.seniorCitizenId,
+                                visitType: 'Verification Visit',
+                                status: vr.status === 'IN_PROGRESS' || officer ? 'Assigned' : 'Pending Verification',
+                                scheduledDate: vr.assignedAt || vr.createdAt,
+                                createdAt: vr.createdAt,
+                                priority: vr.priority || 'Normal',
+                                notes: vr.remarks || 'Initial Registration Verification Visit by Police Beat Officer',
+                                PoliceStation: vr.seniorCitizen?.PoliceStation || null,
+                                officer: officer || null,
+                                isVerification: true
+                            };
+                        })
+                    );
+
+                    result.items = [...mappedVerifications, ...result.items];
+                    result.pagination.total += mappedVerifications.length;
+                }
+
+                // 2. Include Pending Citizen Recall Visit Requests
                 const pendingRequests = await db.visitRequest.findMany({
                     where: {
                         seniorCitizenId: user.citizenId,
@@ -1258,8 +1321,19 @@ export class CitizenPortalController {
                 });
 
                 if (pendingRequests.length > 0) {
-                    result.items = [...pendingRequests, ...result.items];
-                    result.pagination.total += pendingRequests.length;
+                    const mappedVisitRequests = pendingRequests.map((pr: any) => ({
+                        id: pr.id,
+                        seniorCitizenId: pr.seniorCitizenId,
+                        visitType: pr.visitType || 'Citizen Visit Request',
+                        status: pr.status || 'Pending',
+                        scheduledDate: pr.preferredDate || pr.createdAt,
+                        createdAt: pr.createdAt,
+                        notes: pr.purpose || pr.remarks || 'Requested by Senior Citizen',
+                        officer: null
+                    }));
+
+                    result.items = [...mappedVisitRequests, ...result.items];
+                    result.pagination.total += mappedVisitRequests.length;
                 }
             }
 
