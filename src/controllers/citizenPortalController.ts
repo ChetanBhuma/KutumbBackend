@@ -826,6 +826,41 @@ export class CitizenPortalController {
                 exactMatchFields: ['status']
             });
 
+            // Self-healing: sync any registrations whose citizen is already verified to APPROVED
+            await db.citizenRegistration.updateMany({
+                where: {
+                    status: 'PENDING_REVIEW',
+                    citizen: {
+                        OR: [
+                            { idVerificationStatus: 'Verified' },
+                            { idVerificationStatus: 'FieldVerified' },
+                            { status: 'APPROVED' }
+                        ]
+                    }
+                },
+                data: {
+                    status: 'APPROVED'
+                }
+            }).catch((e: any) => console.warn('Sync pending registration status error:', e?.message));
+
+            // When querying for PENDING_REVIEW (new applications), ensure only unverified/new applications are included
+            if (where.status === 'PENDING_REVIEW') {
+                where.OR = [
+                    { citizenId: null },
+                    {
+                        citizen: {
+                            NOT: {
+                                OR: [
+                                    { idVerificationStatus: 'Verified' },
+                                    { idVerificationStatus: 'FieldVerified' },
+                                    { status: 'APPROVED' }
+                                ]
+                            }
+                        }
+                    }
+                ];
+            }
+
             // Add custom filters for related fields
             if (districtId || vulnerabilityLevel) {
                 where.citizen = {

@@ -172,6 +172,27 @@ export class SOSController {
                 dateRangeField: 'createdAt'
             });
 
+            if (query.status === 'ALL' || query.status === 'all') {
+                delete where.status;
+            }
+
+            if (query.search) {
+                const term = String(query.search).trim();
+                where.OR = [
+                    { address: { contains: term, mode: 'insensitive' } },
+                    { notes: { contains: term, mode: 'insensitive' } },
+                    { id: { contains: term, mode: 'insensitive' } },
+                    {
+                        SeniorCitizen: {
+                            OR: [
+                                { fullName: { contains: term, mode: 'insensitive' } },
+                                { mobileNumber: { contains: term, mode: 'insensitive' } }
+                            ]
+                        }
+                    }
+                ];
+            }
+
             if (query.policeStationId) {
                 where.SeniorCitizen = { ...where.SeniorCitizen, policeStationId: String(query.policeStationId) };
             }
@@ -208,17 +229,48 @@ export class SOSController {
                             fullName: true,
                             mobileNumber: true,
                             age: true,
+                            gender: true,
                             permanentAddress: true,
-                            vulnerabilityLevel: true
+                            vulnerabilityLevel: true,
+                            PoliceStation: {
+                                select: { id: true, name: true, code: true }
+                            },
+                            Beat: {
+                                select: { id: true, name: true, beatNumber: true }
+                            }
                         }
+                    },
+                    locationUpdates: {
+                        take: 5,
+                        orderBy: { createdAt: 'desc' }
+                    },
+                    _count: {
+                        select: { locationUpdates: true }
                     }
                 },
                 orderBy: buildOrderBy(req.query, { createdAt: 'desc' })
             });
 
+            // Enrich items with computed SLA metrics
+            const enrichedItems = result.items.map((alert: any) => {
+                const metrics = calculateSOSMetrics(alert);
+                const breachInfo = checkSOSSLABreach(alert);
+                return {
+                    ...alert,
+                    metrics: {
+                        ...metrics,
+                        isCurrentBreached: breachInfo.isBreached,
+                        minutesElapsed: breachInfo.minutesElapsed
+                    }
+                };
+            });
+
             res.json({
                 success: true,
-                data: result
+                data: {
+                    ...result,
+                    items: enrichedItems
+                }
             });
         } catch (error) {
             next(error);

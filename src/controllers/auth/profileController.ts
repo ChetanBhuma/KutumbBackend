@@ -25,7 +25,19 @@ export class ProfileController {
                     isActive: true,
                     mfaEnabled: true,
                     lastLogin: true,
-                    createdAt: true
+                    createdAt: true,
+                    officerProfile: {
+                        select: {
+                            id: true,
+                            name: true,
+                            badgeNumber: true,
+                            rank: true,
+                            policeStationId: true,
+                            beatId: true,
+                            districtId: true,
+                            rangeId: true
+                        }
+                    }
                 }
             });
 
@@ -66,7 +78,13 @@ export class ProfileController {
                         isActive: user.isActive,
                         mfaEnabled: user.mfaEnabled,
                         lastLogin: user.lastLogin,
-                        createdAt: user.createdAt
+                        createdAt: user.createdAt,
+                        officerProfile: user.officerProfile,
+                        policeStationId: user.officerProfile?.policeStationId,
+                        stationId: user.officerProfile?.policeStationId,
+                        beatId: user.officerProfile?.beatId,
+                        districtId: user.officerProfile?.districtId,
+                        rangeId: user.officerProfile?.rangeId
                     }
                 }
             });

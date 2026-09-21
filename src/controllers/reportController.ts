@@ -21,18 +21,28 @@ export class ReportController {
                 if (scope.level === 'RANGE' && scope.jurisdictionIds.rangeId) {
                     citizenWhere.rangeId = scope.jurisdictionIds.rangeId;
                     officerWhere.rangeId = scope.jurisdictionIds.rangeId;
+                    sosWhere.SeniorCitizen = { ...sosWhere.SeniorCitizen, rangeId: scope.jurisdictionIds.rangeId };
+                    visitWhere.SeniorCitizen = { ...visitWhere.SeniorCitizen, rangeId: scope.jurisdictionIds.rangeId };
                 } else if (scope.level === 'DISTRICT' && scope.jurisdictionIds.districtId) {
                     citizenWhere.districtId = scope.jurisdictionIds.districtId;
                     officerWhere.districtId = scope.jurisdictionIds.districtId;
+                    sosWhere.SeniorCitizen = { ...sosWhere.SeniorCitizen, districtId: scope.jurisdictionIds.districtId };
+                    visitWhere.SeniorCitizen = { ...visitWhere.SeniorCitizen, districtId: scope.jurisdictionIds.districtId };
                 } else if (scope.level === 'SUBDIVISION' && scope.jurisdictionIds.subDivisionId) {
                     citizenWhere.subDivisionId = scope.jurisdictionIds.subDivisionId;
                     officerWhere.subDivisionId = scope.jurisdictionIds.subDivisionId;
+                    sosWhere.SeniorCitizen = { ...sosWhere.SeniorCitizen, subDivisionId: scope.jurisdictionIds.subDivisionId };
+                    visitWhere.SeniorCitizen = { ...visitWhere.SeniorCitizen, subDivisionId: scope.jurisdictionIds.subDivisionId };
                 } else if (scope.level === 'POLICE_STATION' && scope.jurisdictionIds.policeStationId) {
                     citizenWhere.policeStationId = scope.jurisdictionIds.policeStationId;
                     officerWhere.policeStationId = scope.jurisdictionIds.policeStationId;
+                    visitWhere.policeStationId = scope.jurisdictionIds.policeStationId;
+                    sosWhere.SeniorCitizen = { ...sosWhere.SeniorCitizen, policeStationId: scope.jurisdictionIds.policeStationId };
                 } else if (scope.level === 'BEAT' && scope.jurisdictionIds.beatId) {
                     citizenWhere.beatId = scope.jurisdictionIds.beatId;
                     officerWhere.beatId = scope.jurisdictionIds.beatId;
+                    visitWhere.beatId = scope.jurisdictionIds.beatId;
+                    sosWhere.SeniorCitizen = { ...sosWhere.SeniorCitizen, beatId: scope.jurisdictionIds.beatId };
                 }
             }
 
@@ -40,14 +50,14 @@ export class ReportController {
             if (policeStationId) {
                 citizenWhere.policeStationId = String(policeStationId);
                 visitWhere.policeStationId = String(policeStationId);
-                sosWhere.SeniorCitizen = { policeStationId: String(policeStationId) };
+                sosWhere.SeniorCitizen = { ...sosWhere.SeniorCitizen, policeStationId: String(policeStationId) };
                 officerWhere.policeStationId = String(policeStationId);
             }
 
             if (beatId) {
                 citizenWhere.beatId = String(beatId);
                 visitWhere.beatId = String(beatId);
-                sosWhere.SeniorCitizen = { beatId: String(beatId) };
+                sosWhere.SeniorCitizen = { ...sosWhere.SeniorCitizen, beatId: String(beatId) };
                 officerWhere.beatId = String(beatId);
             }
 
@@ -74,16 +84,36 @@ export class ReportController {
                 visitRequestWhere.SeniorCitizen = { policeStationId: citizenWhere.policeStationId };
                 serviceRequestWhere.SeniorCitizen = { policeStationId: citizenWhere.policeStationId };
                 beatWhere.policeStationId = citizenWhere.policeStationId;
+                sosWhere.SeniorCitizen = { ...sosWhere.SeniorCitizen, policeStationId: citizenWhere.policeStationId };
+                visitWhere.policeStationId = citizenWhere.policeStationId;
+            } else if (citizenWhere.beatId) {
+                verificationWhere.seniorCitizen = { beatId: citizenWhere.beatId };
+                visitRequestWhere.SeniorCitizen = { beatId: citizenWhere.beatId };
+                serviceRequestWhere.SeniorCitizen = { beatId: citizenWhere.beatId };
+                beatWhere.id = citizenWhere.beatId;
+                sosWhere.SeniorCitizen = { ...sosWhere.SeniorCitizen, beatId: citizenWhere.beatId };
+                visitWhere.beatId = citizenWhere.beatId;
+            } else if (citizenWhere.subDivisionId) {
+                verificationWhere.seniorCitizen = { subDivisionId: citizenWhere.subDivisionId };
+                visitRequestWhere.SeniorCitizen = { subDivisionId: citizenWhere.subDivisionId };
+                serviceRequestWhere.SeniorCitizen = { subDivisionId: citizenWhere.subDivisionId };
+                beatWhere.subDivisionId = citizenWhere.subDivisionId;
+                sosWhere.SeniorCitizen = { ...sosWhere.SeniorCitizen, subDivisionId: citizenWhere.subDivisionId };
+                visitWhere.SeniorCitizen = { ...visitWhere.SeniorCitizen, subDivisionId: citizenWhere.subDivisionId };
             } else if (citizenWhere.districtId) {
                 verificationWhere.seniorCitizen = { districtId: citizenWhere.districtId };
                 visitRequestWhere.SeniorCitizen = { districtId: citizenWhere.districtId };
                 serviceRequestWhere.SeniorCitizen = { districtId: citizenWhere.districtId };
                 beatWhere.districtId = citizenWhere.districtId;
+                sosWhere.SeniorCitizen = { ...sosWhere.SeniorCitizen, districtId: citizenWhere.districtId };
+                visitWhere.SeniorCitizen = { ...visitWhere.SeniorCitizen, districtId: citizenWhere.districtId };
             } else if (citizenWhere.rangeId) {
                 verificationWhere.seniorCitizen = { rangeId: citizenWhere.rangeId };
                 visitRequestWhere.SeniorCitizen = { rangeId: citizenWhere.rangeId };
                 serviceRequestWhere.SeniorCitizen = { rangeId: citizenWhere.rangeId };
                 beatWhere.rangeId = citizenWhere.rangeId;
+                sosWhere.SeniorCitizen = { ...sosWhere.SeniorCitizen, rangeId: citizenWhere.rangeId };
+                visitWhere.SeniorCitizen = { ...visitWhere.SeniorCitizen, rangeId: citizenWhere.rangeId };
             }
 
             // Today's date range for daily operational metrics
@@ -178,7 +208,7 @@ export class ReportController {
                 prisma.visitRequest.count({ where: { ...visitRequestWhere, visitType: 'Follow-up' } }),
                 prisma.serviceRequest.count({ where: serviceRequestWhere }),
                 prisma.sOSAlert.count({ where: sosWhere }),
-                prisma.sOSAlert.count({ where: { ...sosWhere, status: 'Active' } }),
+                prisma.sOSAlert.count({ where: { ...sosWhere, status: { in: ['Active', 'Responded'] } } }),
                 prisma.sOSAlert.count({ where: { ...sosWhere, status: 'Resolved' } }),
                 prisma.auditLog.findMany({
                     take: 10,

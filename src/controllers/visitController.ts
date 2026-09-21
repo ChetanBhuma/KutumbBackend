@@ -540,55 +540,53 @@ export class VisitController {
                             verificationNotes: notes || 'Field verification completed by officer - Auto Approved'
                         }
                     });
-
-                    // AUTO-APPROVAL LOGIC:
-                    // 1. Generate Card Number if missing
-                    const currentCitizen = await prisma.seniorCitizen.findUnique({
-                        where: { id: visit.seniorCitizenId },
-                        select: { digitalCardNumber: true, userId: true }
-                    });
-
-                    let cardUpdateData: any = {
-                        idVerificationStatus: 'Verified', // Fully verified
-                        status: 'APPROVED', // Active and Approved
-                        digitalCardIssued: true,
-                        digitalCardIssueDate: new Date()
-                    };
-
-                    if (!currentCitizen?.digitalCardNumber) {
-                        const year = new Date().getFullYear();
-                        const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-                        cardUpdateData.digitalCardNumber = `SCID-${year}-${randomSuffix}`;
-                    }
-
-                    // Update citizen's verification status
-                    await prisma.seniorCitizen.update({
-                        where: { id: visit.seniorCitizenId },
-                        data: cardUpdateData
-                    });
-
-                    // Update CitizenRegistration status to APPROVED
-                    if (currentCitizen?.userId) {
-                        await prisma.citizenRegistration.updateMany({
-                            where: {
-                                citizenId: visit.seniorCitizenId,
-                                status: { in: ['IN_PROGRESS', 'PENDING_REVIEW'] }
-                            },
-                            data: {
-                                status: 'APPROVED'
-                            }
-                        });
-                    }
-
-                    auditLogger.info('Verification visit completed - Citizen Auto-Approved', {
-                        visitId: updatedVisit.id,
-                        verificationRequestId: verificationRequest.id,
-                        citizenId: visit.seniorCitizenId,
-                        newStatus: 'APPROVED',
-                        cardIssued: true,
-                        registrationApproved: true
-                    });
                 }
+
+                // AUTO-APPROVAL LOGIC:
+                // 1. Generate Card Number if missing
+                const currentCitizen = await prisma.seniorCitizen.findUnique({
+                    where: { id: visit.seniorCitizenId },
+                    select: { digitalCardNumber: true, userId: true }
+                });
+
+                let cardUpdateData: any = {
+                    idVerificationStatus: 'Verified', // Fully verified
+                    status: 'APPROVED', // Active and Approved
+                    digitalCardIssued: true,
+                    digitalCardIssueDate: new Date()
+                };
+
+                if (!currentCitizen?.digitalCardNumber) {
+                    const year = new Date().getFullYear();
+                    const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+                    cardUpdateData.digitalCardNumber = `SCID-${year}-${randomSuffix}`;
+                }
+
+                // Update citizen's verification status
+                await prisma.seniorCitizen.update({
+                    where: { id: visit.seniorCitizenId },
+                    data: cardUpdateData
+                });
+
+                // Update CitizenRegistration status to APPROVED
+                await prisma.citizenRegistration.updateMany({
+                    where: {
+                        citizenId: visit.seniorCitizenId,
+                        status: { in: ['IN_PROGRESS', 'PENDING_REVIEW'] }
+                    },
+                    data: {
+                        status: 'APPROVED'
+                    }
+                });
+
+                auditLogger.info('Verification visit completed - Citizen Auto-Approved', {
+                    visitId: updatedVisit.id,
+                    verificationRequestId: verificationRequest?.id,
+                    citizenId: visit.seniorCitizenId,
+                    newStatus: 'APPROVED',
+                    cardIssued: true,
+                    registrationApproved: true
+                });
 
 
                 // --- QUEUE FOLLOW-UP RE-VISIT FOR SHO ASSIGNMENT ---
@@ -1165,6 +1163,9 @@ export class VisitController {
                                 vulnerabilityLevel: true,
                                 lastVisitDate: true,
                                 nextScheduledVisitDate: true,
+                                age: true,
+                                gender: true,
+                                dateOfBirth: true,
                                 Beat: { select: { id: true, name: true } },
                                 PoliceStation: { select: { id: true, name: true } }
                             }
@@ -1212,6 +1213,9 @@ export class VisitController {
                     seniorCitizenId: vr.SeniorCitizen.id,
                     citizenName: vr.SeniorCitizen.fullName,
                     mobileNumber: vr.SeniorCitizen.mobileNumber,
+                    age: vr.SeniorCitizen.age,
+                    gender: vr.SeniorCitizen.gender,
+                    dateOfBirth: vr.SeniorCitizen.dateOfBirth,
                     address: vr.SeniorCitizen.permanentAddress,
                     beatName: vr.SeniorCitizen.Beat?.name || 'Unassigned Beat',
                     beatId: vr.SeniorCitizen.Beat?.id,
@@ -1264,6 +1268,9 @@ export class VisitController {
                         seniorCitizenId: c.id,
                         citizenName: c.fullName,
                         mobileNumber: c.mobileNumber,
+                        age: c.age,
+                        gender: c.gender,
+                        dateOfBirth: c.dateOfBirth,
                         address: c.permanentAddress,
                         beatName: c.Beat?.name || 'Unassigned Beat',
                         beatId: c.Beat?.id,

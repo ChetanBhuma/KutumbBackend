@@ -218,6 +218,17 @@ export const updateVerificationStatus = async (
                     // Do NOT auto-issue cards here
                 }
             });
+
+            // Sync with citizenRegistration
+            await prisma.citizenRegistration.updateMany({
+                where: {
+                    citizenId: request.entityId,
+                    status: { in: ['IN_PROGRESS', 'PENDING_REVIEW'] }
+                },
+                data: {
+                    status: updateData.status === 'APPROVED' ? 'APPROVED' : 'REJECTED'
+                }
+            });
         }
     }
 
@@ -374,6 +385,9 @@ export const getVerificationRequests = async (filters: {
                     vulnerabilityScore: true,
                     lastAssessmentDate: true,
                     policeStationId: true,
+                    age: true,
+                    gender: true,
+                    dateOfBirth: true,
                     PoliceStation: {
                         select: { name: true }
                     },
