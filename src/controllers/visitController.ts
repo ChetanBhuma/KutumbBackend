@@ -247,6 +247,25 @@ export class VisitController {
                 throw new AppError('Officer must belong to the same Police Station as the Senior Citizen', 400);
             }
 
+            // BUSINESS RULE: A citizen whose verification visit is not completed cannot have Routine/Follow-up visits scheduled
+            const isVerificationVisit = visitData.visitType === 'Verification';
+            const isVerified = citizen.idVerificationStatus === 'Verified' || citizen.idVerificationStatus === 'FieldVerified';
+            if (!isVerified && !isVerificationVisit && visitData.visitType !== 'Emergency') {
+                const completedVerification = await prisma.visit.findFirst({
+                    where: {
+                        seniorCitizenId: citizen.id,
+                        visitType: 'Verification',
+                        status: 'COMPLETED'
+                    }
+                });
+                if (!completedVerification) {
+                    throw new AppError(
+                        'This citizen has not completed their physical verification visit yet. Only a Verification visit can be scheduled.',
+                        400
+                    );
+                }
+            }
+
             // Create visit
             const visit = await prisma.visit.create({
                 data: {
@@ -260,6 +279,21 @@ export class VisitController {
                     officer: true
                 }
             });
+
+            // If a Verification visit was scheduled, sync any pending VerificationRequest for this citizen to IN_PROGRESS
+            if (visit.visitType === 'Verification') {
+                await prisma.verificationRequest.updateMany({
+                    where: {
+                        seniorCitizenId: citizen.id,
+                        status: 'PENDING'
+                    },
+                    data: {
+                        status: 'IN_PROGRESS',
+                        assignedTo: officer.id,
+                        assignedAt: new Date()
+                    }
+                }).catch(err => console.error('Failed to sync VerificationRequest on visit create:', err));
+            }
 
             auditLogger.info('Visit scheduled', {
                 visitId: visit.id,

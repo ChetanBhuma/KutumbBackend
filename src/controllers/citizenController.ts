@@ -74,7 +74,10 @@ export class CitizenController {
                         select: { id: true, name: true, code: true }
                     },
                     FamilyMember: true,
-                    EmergencyContact: true
+                    EmergencyContact: true,
+                    Visit: {
+                        select: { id: true, visitType: true, status: true }
+                    }
                 },
                 orderBy: buildOrderBy(req.query, { createdAt: 'desc' })
             });
@@ -130,6 +133,14 @@ export class CitizenController {
                         take: 5
                     },
                     ServiceRequest: {
+                        orderBy: { createdAt: 'desc' },
+                        take: 10
+                    },
+                    VerificationRequest: {
+                        orderBy: { createdAt: 'desc' },
+                        take: 10
+                    },
+                    VisitRequest: {
                         orderBy: { createdAt: 'desc' },
                         take: 10
                     }
