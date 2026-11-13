@@ -1,7 +1,9 @@
 import express from 'express';
-import { getDistricts, getPoliceStations, getBoundaries, getRanges, getSubDivisions } from '../controllers/geoController';
+import { getDistricts, getPoliceStations, getBoundaries, getRanges, getSubDivisions, detectJurisdiction } from '../controllers/geoController';
 
 const router = express.Router();
+
+router.get('/detect', detectJurisdiction);
 
 /**
  * @swagger

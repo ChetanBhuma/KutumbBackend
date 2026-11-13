@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { CitizenController } from '../controllers/citizenController';
 import { authenticate } from '../middleware/authenticate';
-import { requirePermission, requireRole } from '../middleware/authorize';
+import { requirePermission, requireAnyPermission, requireRole } from '../middleware/authorize';
 import { dataScopeMiddleware } from '../middleware/dataScopeMiddleware';
 import { Permission, Role } from '../types/auth';
 import { body, query } from 'express-validator';
@@ -223,7 +223,7 @@ router.post(
 
 router.put(
     '/:id',
-    requirePermission(Permission.CITIZENS_WRITE),
+    requireAnyPermission([Permission.CITIZENS_WRITE, Permission.VISITS_COMPLETE]),
     auditCRUD.update('citizen'),
     [
         ValidationRules.id('id'),

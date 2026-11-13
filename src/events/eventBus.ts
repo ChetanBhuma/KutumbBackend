@@ -62,6 +62,7 @@ export interface VisitScheduledPayload {
 
 export interface SOSCreatedPayload {
     alertId: string;
+    sosId?: string;
     citizenId: string;
     latitude: number;
     longitude: number;

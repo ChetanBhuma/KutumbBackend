@@ -316,16 +316,19 @@ export class OfficerDashboardController {
                     skip,
                     take: limit,
                     orderBy: { fullName: 'asc' },
-                    select: {
-                        id: true,
-                        fullName: true,
-                        mobileNumber: true,
-                        permanentAddress: true,
-                        gpsLatitude: true,
-                        gpsLongitude: true,
-                        vulnerabilityLevel: true,
-                        photoUrl: true,
-                        status: true
+                    include: {
+                        HouseholdHelp: true,
+                        Document: true,
+                        FamilyMember: true,
+                        EmergencyContact: true,
+                        SpouseDetails: true,
+                        MedicalHistory: true,
+                        PoliceStation: {
+                            select: { id: true, name: true, code: true }
+                        },
+                        Beat: {
+                            select: { id: true, name: true, code: true, beatNumber: true }
+                        }
                     }
                 }),
                 prisma.seniorCitizen.count({ where: whereClause })

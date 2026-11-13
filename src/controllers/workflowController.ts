@@ -4,6 +4,7 @@ import workflowEngine, { WorkflowType } from '../services/workflowEngine';
 import { logger } from '../config/logger';
 import { prisma } from '../config/database';
 import { validateWorkflowTransition } from '../utils/workflowValidator';
+import { websocketService } from '../services/websocketService';
 
 // Start a workflow
 export const startWorkflow = asyncHandler(async (req: Request, res: Response) => {
@@ -68,6 +69,8 @@ export const approveWorkflowStep = asyncHandler(async (req: Request, res: Respon
         approverId: req.user!.id
     });
 
+    websocketService.notifyOfficersSync('WORKFLOW_APPROVED', { workflowId, stepId });
+
     return res.status(200).json({
         success: true,
         message: 'Workflow step approved',
@@ -99,6 +102,8 @@ export const rejectWorkflowStep = asyncHandler(async (req: Request, res: Respons
         approverId: req.user!.id,
         reason
     });
+
+    websocketService.notifyOfficersSync('WORKFLOW_REJECTED', { workflowId, stepId });
 
     return res.status(200).json({
         success: true,

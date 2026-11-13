@@ -442,6 +442,7 @@ export const RolePermissions: Record<Role, Permission[]> = {
     [Role.BEAT_OFFICER]: [
         Permission.DASHBOARD_OFFICER_VIEW,
         Permission.CITIZENS_READ,
+        Permission.CITIZENS_WRITE,
         Permission.CITIZENS_MAP,
         Permission.CITIZENS_MAP_ALL,
         Permission.VISITS_READ,
@@ -454,6 +455,7 @@ export const RolePermissions: Record<Role, Permission[]> = {
     [Role.OFFICER]: [
         Permission.DASHBOARD_OFFICER_VIEW,
         Permission.CITIZENS_READ,
+        Permission.CITIZENS_WRITE,
         Permission.CITIZENS_MAP,
         Permission.CITIZENS_MAP_ALL,
         Permission.VISITS_READ,

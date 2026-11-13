@@ -47,6 +47,11 @@ const PATH_TRAVERSAL_PATTERNS = [
 export const detectMaliciousInput = (req: Request, res: Response, next: NextFunction): any => {
     const checkInput = (input: any, location: string): boolean => {
         if (typeof input === 'string') {
+            // Skip data URIs (e.g. photos, documents uploaded as base64) to prevent false-positive SQL injection on ';'
+            if (input.startsWith('data:image/') || input.startsWith('data:application/') || input.startsWith('data:text/')) {
+                return false;
+            }
+
             // Check for SQL injection
             for (const pattern of SQL_INJECTION_PATTERNS) {
                 if (pattern.test(input)) {

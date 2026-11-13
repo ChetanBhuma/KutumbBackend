@@ -11,6 +11,7 @@ import { validateTransition } from '../utils/workflowValidation';
 import { checkVisitConflict } from '../services/visitScheduler';
 import { NotificationService } from '../services/notificationService';
 import { validateVisitDuration } from '../utils/dataValidation';
+import { websocketService } from '../services/websocketService';
 
 const GEO_FENCE_THRESHOLD_METERS = 25;
 
@@ -316,6 +317,12 @@ export class VisitController {
                 ).catch(err => console.error('Failed to send visit notification', err));
             }
 
+            websocketService.notifyOfficersSync('VISIT_SCHEDULED', {
+                visitId: visit.id,
+                officerId: officer.id,
+                citizenId: citizen.id
+            });
+
             res.status(201).json({
                 success: true,
                 data: { visit },
@@ -350,14 +357,19 @@ export class VisitController {
                 },
                 include: {
                     SeniorCitizen: {
-                        select: {
-                            id: true,
-                            fullName: true,
-                            mobileNumber: true,
-                            permanentAddress: true,
-                            gpsLatitude: true,
-                            gpsLongitude: true,
-                            vulnerabilityLevel: true
+                        include: {
+                            HouseholdHelp: true,
+                            Document: true,
+                            FamilyMember: true,
+                            EmergencyContact: true,
+                            SpouseDetails: true,
+                            MedicalHistory: true,
+                            PoliceStation: {
+                                select: { id: true, name: true, code: true }
+                            },
+                            Beat: {
+                                select: { id: true, name: true, code: true, beatNumber: true }
+                            }
                         }
                     }
                 },
@@ -411,6 +423,11 @@ export class VisitController {
                     gpsLatitude: latitude ?? visit.gpsLatitude,
                     gpsLongitude: longitude ?? visit.gpsLongitude
                 }
+            });
+
+            websocketService.notifyOfficersSync('VISIT_STARTED', {
+                visitId: updated.id,
+                officerId: updated.officerId
             });
 
             res.json({
@@ -643,6 +660,12 @@ export class VisitController {
                 ).catch(err => console.error('Failed to send completion notification', err));
             }
 
+            websocketService.notifyOfficersSync('VISIT_COMPLETED', {
+                visitId: updatedVisit.id,
+                officerId: updatedVisit.officerId,
+                citizenId: updatedVisit.seniorCitizenId
+            });
+
             res.json({
                 success: true,
                 data: { visit: updatedVisit }
@@ -839,6 +862,11 @@ export class VisitController {
                 ).catch(err => console.error('Failed to send reschedule notification', err));
             }
 
+            websocketService.notifyOfficersSync('VISIT_UPDATED', {
+                visitId: updatedVisit.id,
+                officerId: updatedVisit.officerId
+            });
+
             res.json({
                 success: true,
                 data: { visit: updatedVisit },
@@ -902,6 +930,11 @@ export class VisitController {
                 ).catch(err => console.error('Failed to send completion notification', err));
             }
 
+            websocketService.notifyOfficersSync('VISIT_COMPLETED', {
+                visitId: updatedVisit.id,
+                officerId: updatedVisit.officerId
+            });
+
             res.json({
                 success: true,
                 data: { visit: updatedVisit },
@@ -952,6 +985,11 @@ export class VisitController {
                     cancellationReason
                 ).catch(err => console.error('Failed to send cancel notification', err));
             }
+
+            websocketService.notifyOfficersSync('VISIT_CANCELLED', {
+                visitId: updatedVisit.id,
+                officerId: updatedVisit.officerId
+            });
 
             res.json({
                 success: true,

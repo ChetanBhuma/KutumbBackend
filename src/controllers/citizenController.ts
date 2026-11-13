@@ -8,6 +8,7 @@ import { buildWhereClause, buildOrderBy } from '../utils/queryBuilder';
 import { validateTransition } from '../utils/workflowValidation';
 import { recalculateVulnerability } from '../services/vulnerabilityService';
 import { normalizeAadhaar, validateSeniorCitizenAge, validateAadhaar } from '../utils/dataValidation';
+import { websocketService } from '../services/websocketService';
 
 export class CitizenController {
     /**
@@ -75,6 +76,9 @@ export class CitizenController {
                     },
                     FamilyMember: true,
                     EmergencyContact: true,
+                    HouseholdHelp: true,
+                    SpouseDetails: true,
+                    MedicalHistory: true,
                     Visit: {
                         select: { id: true, visitType: true, status: true }
                     }
@@ -109,8 +113,13 @@ export class CitizenController {
         try {
             const { id } = req.params;
 
-            const citizen = await prisma.seniorCitizen.findUnique({
-                where: { id },
+            const citizen = await prisma.seniorCitizen.findFirst({
+                where: {
+                    OR: [
+                        { id },
+                        { srCitizenUniqueId: id }
+                    ]
+                },
                 include: {
                     PoliceStation: true,
                     Beat: true,
@@ -227,7 +236,28 @@ export class CitizenController {
                         create: emergencyContacts
                     } : undefined,
                     HouseholdHelp: householdHelp ? {
-                        create: householdHelp
+                        create: (Array.isArray(householdHelp) ? householdHelp : []).map((h: any) => ({
+                            staffType: h.staffType || 'Domestic Help',
+                            name: h.name || '',
+                            fatherName: h.fatherName || null,
+                            motherName: h.motherName || null,
+                            dob: h.dob ? String(h.dob).split('T')[0] : null,
+                            photoUrl: h.photoUrl || null,
+                            mobileNumber: h.mobileNumber || null,
+                            permanentAddress: h.permanentAddress || null,
+                            localAddress: h.localAddress || null,
+                            address: h.localAddress || h.permanentAddress || h.address || null,
+                            idProofType: h.idProofType || null,
+                            idProofNumber: h.idProofNumber || null,
+                            idProofUrl: h.idProofUrl || null,
+                            employedSince: h.employedSince ? String(h.employedSince).split('T')[0] : null,
+                            domesticHelpType: h.domesticHelpType || null,
+                            otherStaffType: h.otherStaffType || null,
+                            employmentType: h.employmentType || h.jobType || 'Part-Time',
+                            jobType: h.jobType || h.employmentType || null,
+                            signatureUrl: h.signatureUrl || h.thumbImpressionUrl || null,
+                            verificationStatus: h.verificationStatus || 'Not Verified'
+                        })).filter((h: any) => h.name && h.name.trim().length > 0)
                     } : undefined,
                     SpouseDetails: spouseDetails ? {
                         create: spouseDetails
@@ -267,6 +297,12 @@ export class CitizenController {
                 hasMedicalHistory: !!medicalHistory
             });
 
+            // Notify officer mobile apps in real-time
+            websocketService.notifyOfficersSync('CITIZEN_REGISTERED', {
+                citizenId: citizen.id,
+                beatId: citizen.beatId
+            });
+
             res.status(201).json({
                 success: true,
                 data: { citizen },
@@ -291,11 +327,19 @@ export class CitizenController {
             delete updates.updatedAt;
             delete updates.srCitizenUniqueId;
 
-            // Check if citizen exists
-            const existing = await prisma.seniorCitizen.findUnique({ where: { id } });
+            // Check if citizen exists (by cuid id or srCitizenUniqueId)
+            const existing = await prisma.seniorCitizen.findFirst({
+                where: {
+                    OR: [
+                        { id },
+                        { srCitizenUniqueId: id }
+                    ]
+                }
+            });
             if (!existing) {
                 throw new AppError('Citizen not found', 404);
             }
+            const targetCitizenId = existing.id;
 
             // CAPTURE CURRENT LOCATION BEFORE UPDATE (for address change detection)
             const oldBeatId = existing.beatId;
@@ -360,12 +404,74 @@ export class CitizenController {
                 delete mainData[field];
             });
 
+            // Smart resolution of district/policeStation if passed as name or id
+            if (mainData.district) {
+                if (!mainData.districtId) {
+                    const foundDist = await prisma.district.findFirst({
+                        where: {
+                            OR: [
+                                { id: String(mainData.district) },
+                                { name: { equals: String(mainData.district), mode: 'insensitive' } }
+                            ]
+                        }
+                    });
+                    if (foundDist) mainData.districtId = foundDist.id;
+                }
+                delete mainData.district;
+            }
+
+            if (mainData.policeStation) {
+                if (!mainData.policeStationId) {
+                    const cleanPs = String(mainData.policeStation).replace(/^PS\s+/i, '').trim();
+                    const foundPs = await prisma.policeStation.findFirst({
+                        where: {
+                            OR: [
+                                { id: String(mainData.policeStation) },
+                                { name: { equals: String(mainData.policeStation), mode: 'insensitive' } },
+                                { name: { equals: `PS ${cleanPs}`, mode: 'insensitive' } },
+                                { name: { contains: cleanPs, mode: 'insensitive' } }
+                            ]
+                        }
+                    });
+                    if (foundPs) mainData.policeStationId = foundPs.id;
+                }
+                delete mainData.policeStation;
+            }
+
+            // Verify districtId / policeStationId exist in database to avoid foreign key errors
+            if (mainData.districtId) {
+                const distExists = await prisma.district.findUnique({ where: { id: mainData.districtId } });
+                if (!distExists) {
+                    const distByName = await prisma.district.findFirst({
+                        where: { name: { equals: String(mainData.districtId), mode: 'insensitive' } }
+                    });
+                    mainData.districtId = distByName ? distByName.id : null;
+                }
+            }
+
+            if (mainData.policeStationId) {
+                const psExists = await prisma.policeStation.findUnique({ where: { id: mainData.policeStationId } });
+                if (!psExists) {
+                    const cleanPs = String(mainData.policeStationId).replace(/^PS\s+/i, '').trim();
+                    const psByName = await prisma.policeStation.findFirst({
+                        where: {
+                            OR: [
+                                { name: { equals: String(mainData.policeStationId), mode: 'insensitive' } },
+                                { name: { equals: `PS ${cleanPs}`, mode: 'insensitive' } },
+                                { name: { contains: cleanPs, mode: 'insensitive' } }
+                            ]
+                        }
+                    });
+                    mainData.policeStationId = psByName ? psByName.id : null;
+                }
+            }
+
 
             // Update citizen
             let citizen;
             try {
                 citizen = await prisma.seniorCitizen.update({
-                    where: { id },
+                    where: { id: targetCitizenId },
                     data: {
                         ...mainData,
                         submissionType: 'Update',
@@ -391,7 +497,31 @@ export class CitizenController {
                         } : undefined,
                         HouseholdHelp: householdHelp ? {
                             deleteMany: {},
-                            create: householdHelp
+                            create: (Array.isArray(householdHelp) ? householdHelp : []).map((h: any) => ({
+                                id: (h.id && typeof h.id === 'string' && h.id.length > 5 && !h.id.startsWith('temp_')) ? h.id : undefined,
+                                staffType: h.staffType || 'Domestic Help',
+                                name: h.name || '',
+                                fatherName: h.fatherName || null,
+                                motherName: h.motherName || null,
+                                dob: h.dob ? String(h.dob).split('T')[0] : null,
+                                photoUrl: h.photoUrl || null,
+                                mobileNumber: h.mobileNumber || null,
+                                permanentAddress: h.permanentAddress || null,
+                                localAddress: h.localAddress || null,
+                                address: h.localAddress || h.permanentAddress || h.address || null,
+                                idProofType: h.idProofType || null,
+                                idProofNumber: h.idProofNumber || null,
+                                idProofUrl: h.idProofUrl || null,
+                                employedSince: h.employedSince ? String(h.employedSince).split('T')[0] : null,
+                                domesticHelpType: h.domesticHelpType || null,
+                                otherStaffType: h.otherStaffType || null,
+                                employmentType: h.employmentType || h.jobType || 'Part-Time',
+                                jobType: h.jobType || h.employmentType || null,
+                                signatureUrl: h.signatureUrl || h.thumbImpressionUrl || null,
+                                verificationStatus: h.verificationStatus || 'Not Verified',
+                                isActive: h.isActive !== undefined ? Boolean(h.isActive) : true,
+                                remarks: h.remarks || null
+                            })).filter((h: any) => h.name && h.name.trim().length > 0)
                         } : undefined
                     },
                     include: {
@@ -399,7 +529,8 @@ export class CitizenController {
                         EmergencyContact: true,
                         HouseholdHelp: true,
                         SpouseDetails: true,
-                        MedicalHistory: true
+                        MedicalHistory: true,
+                        Document: true
                     }
                 });
             } catch (prismaError: any) {
@@ -509,6 +640,12 @@ export class CitizenController {
                     reVerificationScheduled: !!newOfficerId
                 });
             }
+
+            // Notify officer mobile apps in real-time
+            websocketService.notifyOfficersSync('CITIZEN_UPDATED', {
+                citizenId: citizen.id,
+                beatId: citizen.beatId
+            });
 
             res.json({
                 success: true,

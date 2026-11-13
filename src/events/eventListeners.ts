@@ -1,15 +1,22 @@
 import { eventBus, AppEvent, CitizenRegisteredPayload, VisitScheduledPayload, SOSCreatedPayload } from './eventBus';
 import { NotificationService } from '../services/notificationService';
 import { auditLogger } from '../config/logger';
+import { websocketService } from '../services/websocketService';
 
 /**
  * Register all event listeners
  */
 export const registerEventListeners = () => {
-    // Citizen registered -> Send welcome notification, assign officer
+    // Citizen registered -> Send welcome notification, notify officers
     eventBus.on(AppEvent.CITIZEN_REGISTERED, async (payload: CitizenRegisteredPayload) => {
         try {
             auditLogger.info('Event: Citizen registered', payload);
+
+            // Notify officer mobile apps in real-time
+            websocketService.notifyOfficersSync('CITIZEN_REGISTERED', {
+                citizenId: payload.citizenId,
+                beatId: payload.beatId
+            });
 
             // Send welcome notification
             await NotificationService.sendRegistrationConfirmation(
@@ -29,8 +36,12 @@ export const registerEventListeners = () => {
         try {
             auditLogger.info('Event: Visit scheduled', payload);
 
-            // Notifications handled in controller for now
-            // Could be moved here for decoupling
+            // Notify officer mobile apps in real-time
+            websocketService.notifyOfficersSync('VISIT_SCHEDULED', {
+                visitId: payload.visitId,
+                officerId: payload.officerId,
+                citizenId: payload.citizenId
+            });
         } catch (error) {
             auditLogger.error('Error handling VISIT_SCHEDULED event', { error, payload });
         }
@@ -41,8 +52,11 @@ export const registerEventListeners = () => {
         try {
             auditLogger.error('Event: SOS ALERT CREATED', payload);
 
-            // Critical alerts should trigger multiple notifications
-            // Implementation in SOSController
+            // Real-time broadcast to officer app
+            websocketService.notifyOfficersSync('SOS_ALERT', {
+                sosId: payload.sosId,
+                citizenId: payload.citizenId
+            });
         } catch (error) {
             auditLogger.error('Error handling SOS_CREATED event', { error, payload });
         }
@@ -60,6 +74,11 @@ export const registerEventListeners = () => {
                 payload.endDate
             );
 
+            // Notify officers of reassigned visits
+            websocketService.notifyOfficersSync('VISITS_REASSIGNED', {
+                officerId: payload.officerId
+            });
+
             auditLogger.info('Leave reassignment completed', result);
         } catch (error) {
             auditLogger.error('Error handling OFFICER_LEAVE_APPROVED event', { error, payload });
@@ -68,3 +87,4 @@ export const registerEventListeners = () => {
 
     auditLogger.info('Event listeners registered');
 };
+

@@ -12,8 +12,29 @@ import { Permission } from '../types/auth';
 
 const db = prisma as any;
 
+function parseFlexibleDate(dateInput: string | Date | null | undefined): Date | null {
+    if (!dateInput) return null;
+    if (dateInput instanceof Date) {
+        return isNaN(dateInput.getTime()) ? null : dateInput;
+    }
+    const str = String(dateInput).trim();
+    if (!str) return null;
+    const parts = str.split(/[-/]/);
+    if (parts.length === 3 && parts[0].length <= 2 && parts[2].length === 4) {
+        // dd-MM-yyyy or dd/MM/yyyy
+        const d = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        const y = parseInt(parts[2], 10);
+        const parsed = new Date(Date.UTC(y, m, d));
+        if (!isNaN(parsed.getTime())) return parsed;
+    }
+    const standard = new Date(str);
+    return isNaN(standard.getTime()) ? null : standard;
+}
+
 const calculateAge = (dateOfBirth: string | Date) => {
-    const dob = new Date(dateOfBirth);
+    const dob = parseFlexibleDate(dateOfBirth);
+    if (!dob) return 0;
     const diff = Date.now() - dob.getTime();
     return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000));
 };
@@ -352,13 +373,14 @@ export class CitizenPortalController {
 
             if (!citizen) {
                 // Create new Senior Citizen profile for this registration
-                const dob = (registration.draftData as any)?.dateOfBirth ? new Date((registration.draftData as any).dateOfBirth) : null;
+                const rawDob = (registration.draftData as any)?.dateOfBirth;
+                const dob = parseFlexibleDate(rawDob);
                 citizen = await db.seniorCitizen.create({
                     data: {
                         mobileNumber: registration.mobileNumber,
                         fullName: registration.fullName || '',
                         dateOfBirth: dob || new Date(), // Fallback if DOB missing
-                        age: dob ? calculateAge(dob.toISOString()) : 0,
+                        age: dob ? calculateAge(dob) : 0,
                         gender: 'Unknown', // Required field
                         permanentAddress: 'Pending Update', // Required field
                         pinCode: '000000', // Required field
@@ -651,7 +673,7 @@ export class CitizenPortalController {
                 where: { id: citizenId },
                 data: {
                     fullName: citizenData.fullName,
-                    dateOfBirth: new Date(citizenData.dateOfBirth),
+                    dateOfBirth: parseFlexibleDate(citizenData.dateOfBirth) || new Date(),
                     age: calculateAge(citizenData.dateOfBirth),
                     gender: (citizenData.gender && ['male', 'female', 'other'].includes(citizenData.gender.trim().toLowerCase()))
                         ? citizenData.gender.trim().charAt(0).toUpperCase() + citizenData.gender.trim().slice(1).toLowerCase()
@@ -702,14 +724,14 @@ export class CitizenPortalController {
                     create: {
                         seniorCitizenId: citizen.id,
                         fullName: citizenData.spouseName,
-                        dateOfBirth: citizenData.spouseDob ? new Date(citizenData.spouseDob) : null,
-                        weddingDate: citizenData.spouseWeddingDate ? new Date(citizenData.spouseWeddingDate) : null,
+                        dateOfBirth: citizenData.spouseDob ? parseFlexibleDate(citizenData.spouseDob) : null,
+                        weddingDate: citizenData.spouseWeddingDate ? parseFlexibleDate(citizenData.spouseWeddingDate) : null,
                         isLivingTogether: citizenData.residingWith !== 'Alone'
                     },
                     update: {
                         fullName: citizenData.spouseName,
-                        dateOfBirth: citizenData.spouseDob ? new Date(citizenData.spouseDob) : undefined,
-                        weddingDate: citizenData.spouseWeddingDate ? new Date(citizenData.spouseWeddingDate) : undefined,
+                        dateOfBirth: citizenData.spouseDob ? parseFlexibleDate(citizenData.spouseDob) : undefined,
+                        weddingDate: citizenData.spouseWeddingDate ? parseFlexibleDate(citizenData.spouseWeddingDate) : undefined,
                         isLivingTogether: citizenData.residingWith !== 'Alone'
                     }
                 });
@@ -726,12 +748,25 @@ export class CitizenPortalController {
                         await db.householdHelp.create({
                             data: {
                                 seniorCitizenId: citizen.id,
-                                staffType: staff.staffType,
-                                employmentType: staff.employmentType,
+                                staffType: staff.staffType || 'Domestic Help',
+                                employmentType: staff.employmentType || staff.jobType || 'Part-Time',
+                                jobType: staff.jobType || staff.employmentType || 'Permanent',
+                                signatureUrl: staff.signatureUrl || staff.thumbImpressionUrl || null,
                                 name: staff.name,
-                                mobileNumber: staff.mobileNumber,
-                                idProofType: staff.govtIdType,
-                                idProofUrl: staff.govtIdUrl,
+                                fatherName: staff.fatherName || null,
+                                motherName: staff.motherName || null,
+                                dob: staff.dob || null,
+                                photoUrl: staff.photoUrl || null,
+                                mobileNumber: staff.mobileNumber || null,
+                                permanentAddress: staff.permanentAddress || null,
+                                localAddress: staff.localAddress || staff.address || null,
+                                address: staff.localAddress || staff.address || null,
+                                idProofType: staff.idProofType || staff.govtIdType || null,
+                                idProofNumber: staff.idProofNumber || null,
+                                idProofUrl: staff.idProofUrl || staff.govtIdUrl || null,
+                                employedSince: staff.employedSince || null,
+                                domesticHelpType: staff.domesticHelpType || staff.staffType || 'Cooking',
+                                otherStaffType: staff.otherStaffType || null,
                                 verificationStatus: 'Not Verified'
                             }
                         });

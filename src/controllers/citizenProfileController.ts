@@ -7,8 +7,48 @@ import { NotificationService } from '../services/notificationService';
 import * as VerificationService from '../services/verificationService';
 import { cloudStorage } from '../services/cloudStorageService';
 import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
 
 const db = prisma as any;
+
+/**
+ * Safely saves a base64 data URI (e.g. uploaded photo or document from mobile app)
+ * to local disk under uploads/<folder> and returns its clean static URL path.
+ */
+function saveBase64DataUri(dataUri: string | null | undefined, folder: string, prefix: string): string | null {
+    if (!dataUri || typeof dataUri !== 'string') return null;
+    if (!dataUri.startsWith('data:')) return dataUri;
+
+    try {
+        const matches = dataUri.match(/^data:([A-Za-z0-9\-\+\/]+)[;:,|]base64,(.+)$/);
+        if (!matches || matches.length !== 3) return dataUri;
+
+        const mimeType = matches[1];
+        const base64Data = matches[2];
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        let ext = '.bin';
+        if (mimeType.includes('jpeg') || mimeType.includes('jpg')) ext = '.jpg';
+        else if (mimeType.includes('png')) ext = '.png';
+        else if (mimeType.includes('pdf')) ext = '.pdf';
+        else if (mimeType.includes('webp')) ext = '.webp';
+
+        const uploadDir = path.join(process.cwd(), 'uploads', folder);
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+
+        const fileName = `${prefix}_${Date.now()}_${crypto.randomBytes(6).toString('hex')}${ext}`;
+        const filePath = path.join(uploadDir, fileName);
+        fs.writeFileSync(filePath, buffer);
+
+        return `/uploads/${folder}/${fileName}`;
+    } catch (err) {
+        console.error('Error saving base64 to file:', err);
+        return dataUri.replace(/^data:([A-Za-z0-9\-\+\/]+)[;:,|]base64,/, 'data:$1;base64,');
+    }
+}
 
 const formatMobile = (mobile: string) => {
     // Remove all non-digits
@@ -416,12 +456,26 @@ export class CitizenProfileController {
                                 seniorCitizenId: citizenId,
                                 staffType: help.staffType || 'Domestic Help',
                                 name: help.name,
-                                mobileNumber: help.mobileNumber,
-                                idProofType: help.idProofType,
-                                idProofUrl: help.idProofUrl,
-                                employmentType: help.employmentType || 'Part-Time',
-                                verificationStatus: 'Not Verified',
-                                address: help.address // Ensure address is captured
+                                fatherName: help.fatherName || null,
+                                motherName: help.motherName || null,
+                                dob: help.dob || null,
+                                photoUrl: saveBase64DataUri(help.photoUrl, 'photos', 'staff_photo') || null,
+                                mobileNumber: help.mobileNumber || null,
+                                address: help.localAddress || help.address || null,
+                                permanentAddress: help.permanentAddress || null,
+                                localAddress: help.localAddress || help.address || null,
+                                idProofType: help.idProofType || null,
+                                idProofNumber: help.idProofNumber || null,
+                                idProofUrl: saveBase64DataUri(help.idProofUrl, 'documents', 'staff_doc') || null,
+                                employedSince: help.employedSince || null,
+                                domesticHelpType: help.domesticHelpType || help.staffType || 'Cooking',
+                                otherStaffType: help.otherStaffType || null,
+                                employmentType: help.employmentType || help.jobType || 'Part-Time',
+                                signatureUrl: help.signatureUrl || help.thumbImpressionUrl || null,
+                                jobType: help.jobType || help.employmentType || 'Permanent',
+                                verificationStatus: help.verificationStatus || 'Not Verified',
+                                isActive: help.isActive !== undefined ? Boolean(help.isActive) : true,
+                                remarks: help.remarks || null
                             }))
                         });
                     }
@@ -483,8 +537,21 @@ export class CitizenProfileController {
                     // Better wait for details.
                 }
 
-                // 6. Sync with CitizenRegistration for Admin Review
-                const freshCitizen = await tx.seniorCitizen.findUnique({ where: { id: citizenId } });
+                // 6. Sync with CitizenRegistration for Admin Review & Return fresh citizen with relations
+                const freshCitizen = await tx.seniorCitizen.findUnique({
+                    where: { id: citizenId },
+                    include: {
+                        PoliceStation: true,
+                        Beat: true,
+                        FamilyMember: true,
+                        EmergencyContact: true,
+                        SpouseDetails: true,
+                        District: true,
+                        Document: true,
+                        HouseholdHelp: true,
+                        MedicalHistory: true
+                    }
+                });
                 if (freshCitizen && freshCitizen.mobileNumber) {
                     await tx.citizenRegistration.upsert({
                         where: { mobileNumber: freshCitizen.mobileNumber },
@@ -506,13 +573,16 @@ export class CitizenProfileController {
                     });
                 }
 
+                return freshCitizen;
             }, {
                 maxWait: 10000,
                 timeout: 30000
             });
 
             // 6. Sync with CitizenRegistration & Auth
-            await CitizenProfileController.syncCitizenStatus(citizenId, citizen);
+            if (citizen) {
+                await CitizenProfileController.syncCitizenStatus(citizenId, citizen);
+            }
 
             // NOTE: VerificationRequest creation removed - already handled during initial registration
 
@@ -536,7 +606,14 @@ export class CitizenProfileController {
 
             return res.json({
                 success: true,
-                data: { citizen },
+                data: {
+                    citizen: citizen ? {
+                        ...citizen,
+                        HouseholdHelp: citizen.HouseholdHelp || [],
+                        householdHelp: citizen.HouseholdHelp || [],
+                        isProfileComplete: CitizenProfileController.isProfileComplete(citizen)
+                    } : null
+                },
                 message: 'Profile updated successfully'
             });
         } catch (error) {
@@ -903,20 +980,24 @@ export class CitizenProfileController {
 
             }
 
-            // Clean up previous documents of the same singleton type (e.g. ProfilePhoto, AddressProof)
-            const isSingletonType = documentType === 'ProfilePhoto' || documentType === 'AddressProof';
+            // Clean up previous documents of the same singleton type (e.g. ProfilePhoto, AddressProof, ID Proof)
+            const rawType = (documentType || 'Other').trim();
+            const normDocType = rawType.replace(/[\s\-_]/g, '').toLowerCase();
+            const isSingletonType = ['profilephoto', 'addressproof', 'idproof', 'identityproof'].includes(normDocType);
+
             if (isSingletonType) {
                 const existingDocs = await db.document.findMany({
-                    where: { seniorCitizenId: citizenId, documentType }
+                    where: { seniorCitizenId: citizenId }
                 });
-                for (const oldDoc of existingDocs) {
+                const toDelete = existingDocs.filter((d: any) => 
+                    (d.documentType || '').replace(/[\s\-_]/g, '').toLowerCase() === normDocType
+                );
+                for (const oldDoc of toDelete) {
                     try {
                         if (oldDoc.fileUrl) await cloudStorage.deleteFile(oldDoc.fileUrl);
                     } catch (e) { /* ignore */ }
+                    await db.document.delete({ where: { id: oldDoc.id } });
                 }
-                await db.document.deleteMany({
-                    where: { seniorCitizenId: citizenId, documentType }
-                });
             }
 
             const document = await db.document.create({
@@ -931,12 +1012,12 @@ export class CitizenProfileController {
             });
 
             // Sync with SeniorCitizen fields if applicable
-            if (documentType === 'ProfilePhoto') {
+            if (normDocType === 'profilephoto') {
                 await db.seniorCitizen.update({
                     where: { id: citizenId },
                     data: { photoUrl: fileUrl }
                 });
-            } else if (documentType === 'AddressProof') {
+            } else if (normDocType === 'addressproof') {
                 await db.seniorCitizen.update({
                     where: { id: citizenId },
                     data: { addressProofUrl: fileUrl }
@@ -968,29 +1049,105 @@ export class CitizenProfileController {
             if (!citizenId) {
                 return res.json({
                     success: true,
-                    data: { documents: [] }
+                    data: { documents: [], householdHelp: [] }
                 });
             }
+
+            const citizen = await db.seniorCitizen.findUnique({
+                where: { id: citizenId },
+                include: {
+                    HouseholdHelp: {
+                        orderBy: { createdAt: 'desc' }
+                    }
+                }
+            });
 
             const rawDocuments = await db.document.findMany({
                 where: { seniorCitizenId: citizenId },
                 orderBy: { uploadedAt: 'desc' }
             });
 
-            // Deduplicate by fileUrl and documentType
-            const seen = new Set<string>();
-            const documents = rawDocuments.filter((doc: any) => {
-                const key = `${doc.documentType}_${doc.fileUrl}`;
-                if (seen.has(key)) {
-                    return false;
+            // Collect all fileUrls that belong to household staff members
+            const staffFileUrls = new Set<string>();
+            for (const staff of (citizen?.HouseholdHelp || [])) {
+                if (staff.photoUrl) staffFileUrls.add(staff.photoUrl);
+                if (staff.idProofUrl) staffFileUrls.add(staff.idProofUrl);
+                if (staff.signatureUrl) staffFileUrls.add(staff.signatureUrl);
+            }
+
+            const isStaffDoc = (doc: any) => {
+                if (doc.fileUrl && staffFileUrls.has(doc.fileUrl)) return true;
+                const normType = (doc.documentType || '').replace(/[\s\-_]/g, '').toLowerCase();
+                if (['staffphoto', 'signature', 'staffsignature', 'staffdoc', 'staffdocument', 'staffid', 'staffidentityproof', 'staffidproof'].includes(normType)) {
+                    return true;
                 }
-                seen.add(key);
-                return true;
-            });
+                const docName = (doc.documentName || '').toLowerCase();
+                if (docName.includes('staff') || docName.includes('servant') || docName.includes('domestic') || docName.includes('thumb')) {
+                    return true;
+                }
+                return false;
+            };
+
+            // Deduplicate singleton types: keep only the newest one for Address Proof, Profile Photo, ID Proof
+            const seenSingleton = new Set<string>();
+            const seenFileUrls = new Set<string>();
+            const documents = [];
+
+            for (const doc of rawDocuments) {
+                // Strictly exclude any staff document (photo, signature, staff ID) from citizen documents
+                if (isStaffDoc(doc)) {
+                    continue;
+                }
+
+                if (doc.fileUrl && seenFileUrls.has(doc.fileUrl)) {
+                    continue;
+                }
+                const normType = (doc.documentType || '').replace(/[\s\-_]/g, '').toLowerCase();
+                const isSingleton = ['profilephoto', 'addressproof', 'idproof', 'identityproof'].includes(normType);
+                if (isSingleton) {
+                    if (seenSingleton.has(normType)) {
+                        continue; // Skip older version
+                    }
+                    seenSingleton.add(normType);
+                }
+                if (doc.fileUrl) seenFileUrls.add(doc.fileUrl);
+                documents.push(doc);
+            }
+
+            // If SeniorCitizen has addressProofUrl but not yet in documents, add it
+            if (citizen?.addressProofUrl && !seenSingleton.has('addressproof') && !seenFileUrls.has(citizen.addressProofUrl)) {
+                documents.unshift({
+                    id: 'citizen-address-proof-profile',
+                    seniorCitizenId: citizenId,
+                    documentType: 'AddressProof',
+                    documentName: 'Address Proof',
+                    fileUrl: citizen.addressProofUrl,
+                    fileType: 'application/pdf',
+                    fileSize: 0,
+                    uploadedAt: citizen.updatedAt || citizen.createdAt
+                });
+            }
+
+            // If SeniorCitizen has photoUrl but not yet in documents, add it
+            if (citizen?.photoUrl && !seenSingleton.has('profilephoto') && !seenFileUrls.has(citizen.photoUrl)) {
+                documents.unshift({
+                    id: 'citizen-profile-photo-profile',
+                    seniorCitizenId: citizenId,
+                    documentType: 'ProfilePhoto',
+                    documentName: 'Profile Photo',
+                    fileUrl: citizen.photoUrl,
+                    fileType: 'image/jpeg',
+                    fileSize: 0,
+                    uploadedAt: citizen.updatedAt || citizen.createdAt
+                });
+            }
 
             return res.json({
                 success: true,
-                data: { documents }
+                data: {
+                    documents,
+                    householdHelp: citizen?.HouseholdHelp || []
+                }
             });
         } catch (error) {
             return next(error);
@@ -1031,12 +1188,13 @@ export class CitizenProfileController {
             });
 
             // If it was the citizen's photo or address proof, clear field
-            if (document.documentType === 'ProfilePhoto') {
+            const normType = (document.documentType || '').replace(/[\s\-_]/g, '').toLowerCase();
+            if (normType === 'profilephoto') {
                 await db.seniorCitizen.update({
                     where: { id: citizenId },
                     data: { photoUrl: null }
                 });
-            } else if (document.documentType === 'AddressProof') {
+            } else if (normType === 'addressproof') {
                 await db.seniorCitizen.update({
                     where: { id: citizenId },
                     data: { addressProofUrl: null }

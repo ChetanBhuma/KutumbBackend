@@ -259,16 +259,28 @@ model HouseholdHelp {
   seniorCitizenId    String
   staffType          String        @default("Domestic Help") // Domestic Help, Driver, Watchman, Tenant
   name               String
+  fatherName         String?
+  motherName         String?
+  dob                String?
+  photoUrl           String?
   mobileNumber       String?
   address            String?
+  permanentAddress   String?
+  localAddress       String?
   idProofType        String? // Aadhaar, VoterID, etc.
   idProofNumber      String?
   idProofUrl         String? // Uploaded document URL
+  employedSince      String?
+  domesticHelpType   String? // Cooking, Dusting & Utensil Cleaning, Outdoor works, Attending guest/visitor, Attending phone calls, Any Other
+  otherStaffType     String? // If Any Other specified
   verificationStatus String        @default("Not Verified")
   startDate          DateTime?
   endDate            DateTime?
   remarks            String?
   employmentType     String        @default("Part-Time") // Full-Time, Part-Time, None
+  signatureUrl       String? // Thumb impression or Signature URL
+  jobType            String? // Permanent, Part-Time, Temporary, Daily Wage, Other
+  isActive           Boolean       @default(true)
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
   SeniorCitizen      SeniorCitizen @relation(fields: [seniorCitizenId], references: [id], onDelete: Cascade)

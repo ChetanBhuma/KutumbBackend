@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { OfficerAuthController } from '../controllers/auth/officerAuthController';
+import { AuthController } from '../controllers/authController';
 import { OfficerDashboardController } from '../controllers/officerDashboardController';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole, requirePermission } from '../middleware/authorize';
@@ -54,6 +55,7 @@ router.post('/auth/send-otp', OfficerAuthController.sendOTP);
  *         description: Login successful
  */
 router.post('/auth/verify-otp', OfficerAuthController.verifyOTP);
+router.post('/auth/refresh-token', AuthController.refreshToken);
 
 // Protected routes (Dashboard)
 // All these require authentication and OFFICER role

@@ -169,6 +169,7 @@ setupSwagger(app as any, `/api/${config.apiVersion}/docs`);
 // ============================================
 import publicMastersRoutes from './routes/publicMastersRoutes';
 app.use(`/api/${config.apiVersion}/masters`, publicMastersRoutes);
+app.use(`/api/${config.apiVersion}/public/masters`, publicMastersRoutes);
 
 // Citizen authentication routes (public)
 import citizenAuthRoutes from './routes/citizenAuthRoutes';

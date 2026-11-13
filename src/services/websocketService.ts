@@ -243,6 +243,24 @@ class WebSocketService {
             timestamp: new Date().toISOString()
         });
     }
+
+    /**
+     * Notify all officer mobile apps to silently sync their data in real-time
+     */
+    notifyOfficersSync(reason: string, metadata: any = {}) {
+        if (!this.io) return;
+
+        const payload = {
+            reason,
+            ...metadata,
+            timestamp: new Date().toISOString()
+        };
+
+        this.io.to('role_OFFICER').emit('officer:sync', payload);
+        this.io.emit('officer:sync', payload);
+
+        logger.info('Broadcast officer:sync event to mobile apps', { reason, metadata });
+    }
 }
 
 export const websocketService = new WebSocketService();

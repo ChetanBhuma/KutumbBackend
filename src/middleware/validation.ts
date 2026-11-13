@@ -79,11 +79,13 @@ export class ValidationRules {
                 const seedPattern = /^[a-z]+-\d+$/;
                 // Accept any cuid-like format (starts with 'c' and has alphanumerics)
                 const flexibleCuid = /^c[a-z0-9]+$/;
+                // Accept senior citizen unique IDs (e.g., SC-2024-DEMO-0001, SC-DEL-1029)
+                const scIdPattern = /^SC-[A-Za-z0-9-]+$/i;
 
-                if (cuidPattern.test(value) || seedPattern.test(value) || flexibleCuid.test(value)) {
+                if (cuidPattern.test(value) || seedPattern.test(value) || flexibleCuid.test(value) || scIdPattern.test(value)) {
                     return true;
                 }
-                throw new Error('Invalid ID format. Expected CUID or test ID format (e.g., citizen-1).');
+                throw new Error('Invalid ID format. Expected CUID, test ID, or SC ID format.');
             });
     }
 
