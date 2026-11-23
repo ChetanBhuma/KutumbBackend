@@ -25,7 +25,11 @@
         "seed:comprehensive": "ts-node prisma/seeds/comprehensive-seed.ts",
         "seed:geojson": "ts-node scripts/seed-from-geojson.ts",
         "seed:all": "npm run seed:users && npm run seed:citizens",
-        "migrate:permissions": "ts-node scripts/migrate-permissions-complete.ts"
+        "migrate:permissions": "ts-node scripts/migrate-permissions-complete.ts",
+        "db:sync:both": "node scripts/sync_both_databases.js",
+        "db:migrate:to-local": "node scripts/migrate_neon_to_local.js",
+        "db:switch:local": "node scripts/switch_db_target.js local",
+        "db:switch:cloud": "node scripts/switch_db_target.js cloud"
     },
     "keywords": [
         "express",

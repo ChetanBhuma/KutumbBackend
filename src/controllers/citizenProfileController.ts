@@ -673,6 +673,7 @@ export class CitizenProfileController {
                 });
             }
 
+            // 1. Fetch visits
             const visits = await db.visit.findMany({
                 where: { seniorCitizenId: citizenId },
                 include: {
@@ -682,7 +683,12 @@ export class CitizenProfileController {
                 orderBy: { scheduledDate: 'desc' }
             });
 
-// 1. Fetch legacy VisitRequests
+            // Check if there is already an existing Verification visit (e.g. Completed or Scheduled)
+            const hasExistingVerificationVisit = visits.some((v: any) =>
+                v.visitType?.toLowerCase()?.includes('verification')
+            );
+
+            // 2. Fetch legacy VisitRequests
             const visitRequests = await db.visitRequest.findMany({
                 where: {
                     seniorCitizenId: citizenId,
@@ -691,16 +697,19 @@ export class CitizenProfileController {
                 orderBy: { createdAt: 'desc' }
             });
 
-            // 2. Fetch new VerificationRequests (Pending/InProgress)
-            const verificationRequests = await db.verificationRequest.findMany({
-                where: {
-                    seniorCitizenId: citizenId,
-                    status: { in: ['PENDING', 'IN_PROGRESS'] }
-                },
-                orderBy: { createdAt: 'desc' }
-            });
+            // 3. Fetch new VerificationRequests ONLY IF no verification visit already exists in Visit table
+            let verificationRequests: any[] = [];
+            if (!hasExistingVerificationVisit) {
+                verificationRequests = await db.verificationRequest.findMany({
+                    where: {
+                        seniorCitizenId: citizenId,
+                        status: { in: ['PENDING', 'IN_PROGRESS'] }
+                    },
+                    orderBy: { createdAt: 'desc' }
+                });
+            }
 
-            // 3. Map legacy requests
+            // 4. Map legacy requests
             const mappedVisitRequests = visitRequests.map((r: any) => ({
                 id: r.id,
                 visitType: r.visitType || 'Request',
@@ -711,10 +720,10 @@ export class CitizenProfileController {
                 isRequest: true
             }));
 
-            // 4. Map new verification requests to same format
+            // 5. Map new verification requests to same format
             const mappedVerificationRequests = verificationRequests.map((r: any) => ({
                 id: r.id,
-                visitType: 'Verification',
+                visitType: 'Verification Visit',
                 scheduledDate: r.createdAt, // Use creation date as preferred date fallback
                 createdAt: r.createdAt,
                 status: r.status === 'IN_PROGRESS' ? 'Pending' : 'Pending', // Map to PascalCase 'Pending' for UI consistency
@@ -733,7 +742,16 @@ export class CitizenProfileController {
 
             return res.json({
                 success: true,
-                data: { visits: allVisits }
+                data: {
+                    visits: allVisits,
+                    items: allVisits, // Support both items and visits property for 100% web & mobile parity
+                    pagination: {
+                        page: 1,
+                        limit: allVisits.length,
+                        total: allVisits.length,
+                        pages: 1
+                    }
+                }
             });
         } catch (error) {
             return next(error);

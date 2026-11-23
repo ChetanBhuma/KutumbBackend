@@ -511,91 +511,103 @@ export class VisitController {
                 seniorCitizenUpdate.isSoftDeleted = true;
             }
 
-            const updatedVisit = await prisma.visit.update({
-                where: { id },
-                data: {
-                    status: 'COMPLETED',
-                    completedDate: new Date(),
-                    assessmentData: assessmentData || undefined,
-                    riskScore: typeof riskScore === 'number' ? riskScore : visit.riskScore,
-                    notes: notes || visit.notes,
-                    photoUrl: photoUrl || visit.photoUrl,
-                    gpsLatitude: gpsLatitude ?? visit.gpsLatitude,
-                    gpsLongitude: gpsLongitude ?? visit.gpsLongitude,
-                    duration: duration ?? visit.duration
-                },
-                include: { SeniorCitizen: true, officer: true }
-            });
-
-            // Update citizen profile with assessment data
-            await prisma.seniorCitizen.update({
-                where: { id: visit.seniorCitizenId },
-                data: seniorCitizenUpdate
-            });
-
-            // SPECIAL HANDLING FOR VERIFICATION VISITS
-            if (visit.visitType === 'Verification') {
-                // Find the related VerificationRequest
-                const verificationRequest = await prisma.verificationRequest.findFirst({
-                    where: {
-                        seniorCitizenId: visit.seniorCitizenId,
-                        entityType: 'SeniorCitizen',
-                        status: { in: ['PENDING', 'IN_PROGRESS'] }
+            // ATOMIC TRANSACTION: Execute Visit completion, Citizen updates, and Verification approvals together
+            const result = await prisma.$transaction(async (tx) => {
+                const updatedVisit = await tx.visit.update({
+                    where: { id },
+                    data: {
+                        status: 'COMPLETED',
+                        completedDate: new Date(),
+                        assessmentData: assessmentData || undefined,
+                        riskScore: typeof riskScore === 'number' ? riskScore : visit.riskScore,
+                        notes: notes || visit.notes,
+                        photoUrl: photoUrl || visit.photoUrl,
+                        gpsLatitude: gpsLatitude ?? visit.gpsLatitude,
+                        gpsLongitude: gpsLongitude ?? visit.gpsLongitude,
+                        duration: duration ?? visit.duration
                     },
-                    orderBy: { createdAt: 'desc' }
+                    include: { SeniorCitizen: true, officer: true }
                 });
 
-                if (verificationRequest) {
-                    // Update VerificationRequest to show verification is COMPLETE (Auto-Approved)
-                    await prisma.verificationRequest.update({
-                        where: { id: verificationRequest.id },
+                // Update citizen profile with assessment data
+                await tx.seniorCitizen.update({
+                    where: { id: visit.seniorCitizenId },
+                    data: seniorCitizenUpdate
+                });
+
+                let verificationRequest: any = null;
+
+                // SPECIAL HANDLING FOR VERIFICATION VISITS
+                if (visit.visitType === 'Verification' || visit.visitType?.toLowerCase()?.includes('verification')) {
+                    // Find the related VerificationRequest
+                    verificationRequest = await tx.verificationRequest.findFirst({
+                        where: {
+                            seniorCitizenId: visit.seniorCitizenId,
+                            entityType: 'SeniorCitizen',
+                            status: { in: ['PENDING', 'IN_PROGRESS'] }
+                        },
+                        orderBy: { createdAt: 'desc' }
+                    });
+
+                    if (verificationRequest) {
+                        // Update VerificationRequest to show verification is COMPLETE (Auto-Approved)
+                        await tx.verificationRequest.update({
+                            where: { id: verificationRequest.id },
+                            data: {
+                                status: 'APPROVED', // Auto-approved based on officer field work
+                                verifiedBy: req.user?.id,
+                                verifiedAt: new Date(),
+                                verificationMethod: 'Physical',
+                                verificationNotes: notes || 'Field verification completed by officer - Auto Approved'
+                            }
+                        });
+                    }
+
+                    // AUTO-APPROVAL LOGIC:
+                    // 1. Generate Card Number if missing
+                    const currentCitizen = await tx.seniorCitizen.findUnique({
+                        where: { id: visit.seniorCitizenId },
+                        select: { digitalCardNumber: true, userId: true }
+                    });
+
+                    let cardUpdateData: any = {
+                        idVerificationStatus: 'Verified', // Fully verified
+                        status: 'APPROVED', // Active and Approved
+                        digitalCardIssued: true,
+                        digitalCardIssueDate: new Date()
+                    };
+
+                    if (!currentCitizen?.digitalCardNumber) {
+                        const year = new Date().getFullYear();
+                        const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+                        cardUpdateData.digitalCardNumber = `SCID-${year}-${randomSuffix}`;
+                    }
+
+                    // Update citizen's verification status
+                    await tx.seniorCitizen.update({
+                        where: { id: visit.seniorCitizenId },
+                        data: cardUpdateData
+                    });
+
+                    // Update CitizenRegistration status to APPROVED
+                    await tx.citizenRegistration.updateMany({
+                        where: {
+                            citizenId: visit.seniorCitizenId,
+                            status: { in: ['IN_PROGRESS', 'PENDING_REVIEW'] }
+                        },
                         data: {
-                            status: 'APPROVED', // Auto-approved based on officer field work
-                            verifiedBy: req.user?.id,
-                            verifiedAt: new Date(),
-                            verificationMethod: 'Physical',
-                            verificationNotes: notes || 'Field verification completed by officer - Auto Approved'
+                            status: 'APPROVED'
                         }
                     });
                 }
 
-                // AUTO-APPROVAL LOGIC:
-                // 1. Generate Card Number if missing
-                const currentCitizen = await prisma.seniorCitizen.findUnique({
-                    where: { id: visit.seniorCitizenId },
-                    select: { digitalCardNumber: true, userId: true }
-                });
+                return { updatedVisit, verificationRequest };
+            });
 
-                let cardUpdateData: any = {
-                    idVerificationStatus: 'Verified', // Fully verified
-                    status: 'APPROVED', // Active and Approved
-                    digitalCardIssued: true,
-                    digitalCardIssueDate: new Date()
-                };
+            const updatedVisit = result.updatedVisit;
+            const verificationRequest = result.verificationRequest;
 
-                if (!currentCitizen?.digitalCardNumber) {
-                    const year = new Date().getFullYear();
-                    const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-                    cardUpdateData.digitalCardNumber = `SCID-${year}-${randomSuffix}`;
-                }
-
-                // Update citizen's verification status
-                await prisma.seniorCitizen.update({
-                    where: { id: visit.seniorCitizenId },
-                    data: cardUpdateData
-                });
-
-                // Update CitizenRegistration status to APPROVED
-                await prisma.citizenRegistration.updateMany({
-                    where: {
-                        citizenId: visit.seniorCitizenId,
-                        status: { in: ['IN_PROGRESS', 'PENDING_REVIEW'] }
-                    },
-                    data: {
-                        status: 'APPROVED'
-                    }
-                });
-
+            if (visit.visitType === 'Verification' || visit.visitType?.toLowerCase()?.includes('verification')) {
                 auditLogger.info('Verification visit completed - Citizen Auto-Approved', {
                     visitId: updatedVisit.id,
                     verificationRequestId: verificationRequest?.id,
@@ -604,45 +616,44 @@ export class VisitController {
                     cardIssued: true,
                     registrationApproved: true
                 });
-
-
-                // --- QUEUE FOLLOW-UP RE-VISIT FOR SHO ASSIGNMENT ---
-                // Frequency Rules: Critical=+15d, High=+21d, Medium=+41d, Low=+51d
-                let daysToAdd = 51; // Default Low
-                if (newVulnerabilityLevel === 'Critical') daysToAdd = 15;
-                else if (newVulnerabilityLevel === 'High') daysToAdd = 21;
-                else if (newVulnerabilityLevel === 'Medium') daysToAdd = 41;
-
-                const nextVisitDate = new Date();
-                nextVisitDate.setDate(nextVisitDate.getDate() + daysToAdd);
-
-                // Update citizen record with next scheduled visit due date
-                await prisma.seniorCitizen.update({
-                    where: { id: visit.seniorCitizenId },
-                    data: {
-                        nextScheduledVisitDate: nextVisitDate
-                    }
-                });
-
-                // Create a pending VisitRequest record awaiting SHO assignment
-                const followUpRequest = await prisma.visitRequest.create({
-                    data: {
-                        seniorCitizenId: visit.seniorCitizenId,
-                        visitType: 'Follow-up',
-                        preferredDate: nextVisitDate,
-                        status: 'Pending',
-                        notes: `Auto-scheduled re-visit due based on vulnerability assessment (${newVulnerabilityLevel}) - Pending SHO officer assignment`
-                    }
-                });
-
-                auditLogger.info('Follow-up re-visit queued for SHO assignment', {
-                    originalVisitId: visit.id,
-                    visitRequestId: followUpRequest.id,
-                    seniorCitizenId: visit.seniorCitizenId,
-                    vulnerabilityLevel: newVulnerabilityLevel,
-                    dueDate: nextVisitDate
-                });
             }
+
+            // --- QUEUE FOLLOW-UP RE-VISIT FOR SHO ASSIGNMENT ---
+            // Frequency Rules: Critical=+15d, High=+21d, Medium=+41d, Low=+51d
+            let daysToAdd = 51; // Default Low
+            if (newVulnerabilityLevel === 'Critical') daysToAdd = 15;
+            else if (newVulnerabilityLevel === 'High') daysToAdd = 21;
+            else if (newVulnerabilityLevel === 'Medium') daysToAdd = 41;
+
+            const nextVisitDate = new Date();
+            nextVisitDate.setDate(nextVisitDate.getDate() + daysToAdd);
+
+            // Update citizen record with next scheduled visit due date
+            await prisma.seniorCitizen.update({
+                where: { id: visit.seniorCitizenId },
+                data: {
+                    nextScheduledVisitDate: nextVisitDate
+                }
+            });
+
+            // Create a pending VisitRequest record awaiting SHO assignment
+            const followUpRequest = await prisma.visitRequest.create({
+                data: {
+                    seniorCitizenId: visit.seniorCitizenId,
+                    visitType: 'Follow-up',
+                    preferredDate: nextVisitDate,
+                    status: 'Pending',
+                    notes: `Auto-scheduled re-visit due based on vulnerability assessment (${newVulnerabilityLevel}) - Pending SHO officer assignment`
+                }
+            });
+
+            auditLogger.info('Follow-up re-visit queued for SHO assignment', {
+                originalVisitId: visit.id,
+                visitRequestId: followUpRequest.id,
+                seniorCitizenId: visit.seniorCitizenId,
+                vulnerabilityLevel: newVulnerabilityLevel,
+                dueDate: nextVisitDate
+            });
 
             auditLogger.info('Visit completed by officer', {
                 visitId: updatedVisit.id,

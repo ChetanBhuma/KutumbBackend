@@ -726,6 +726,8 @@ model Visit {
   @@index([status])
   @@index([policeStationId])
   @@index([beatId])
+  @@index([seniorCitizenId, status]) // COMPOSITE: Citizen portal & mobile app queries
+  @@index([officerId, status, scheduledDate]) // COMPOSITE: Officer assignment & completions
   @@index([officerId, status]) // COMPOSITE: Officer dashboard queries
   @@index([status, scheduledDate]) // COMPOSITE: Scheduling views
 }

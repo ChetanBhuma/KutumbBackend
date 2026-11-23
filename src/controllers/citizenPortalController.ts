@@ -1361,12 +1361,13 @@ export class CitizenPortalController {
                                 });
                             }
 
+                            const isAssigned = Boolean(vr.assignedTo || officer);
                             return {
                                 id: vr.id,
                                 seniorCitizenId: vr.seniorCitizenId,
                                 visitType: 'Verification Visit',
-                                status: vr.status === 'IN_PROGRESS' || officer ? 'Assigned' : 'Pending Verification',
-                                scheduledDate: vr.assignedAt || vr.createdAt,
+                                status: isAssigned ? (vr.status === 'IN_PROGRESS' ? 'In Progress' : 'Assigned') : 'Awaiting Officer Assignment',
+                                scheduledDate: isAssigned ? (vr.assignedAt || vr.updatedAt || vr.createdAt) : null,
                                 createdAt: vr.createdAt,
                                 priority: vr.priority || 'Normal',
                                 notes: vr.remarks || 'Initial Registration Verification Visit by Police Beat Officer',
